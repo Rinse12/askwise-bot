@@ -2,6 +2,25 @@
 
 An AI reply bot for Bitsocial communities, in the spirit of "@grok is this true?". It only works in communities that explicitly installed it. In those, anyone can mention `@bitsocialbot` (or `bitsocialbot.bso` / `u/bitsocialbot.bso`) in a post or a reply, and the bot answers in the thread. It reads the thread and any images posted in it.
 
+## Using the bot
+
+In any community that has installed it, mention the bot in a post or a reply, and it answers in the thread a few moments later.
+
+- **How to call it:** write `@bitsocialbot` anywhere in your post's title or text, or in a reply. `bitsocialbot.bso` and `u/bitsocialbot.bso` work too.
+- **Examples:**
+  - a reply under a post: `@bitsocialbot is this true?`
+  - a post titled `@bitsocialbot explain how ENS names work`
+  - a reply under an image post: `@bitsocialbot what's in this picture?`
+- **What it reads:** your comment, the post and the replies above yours, and any images in them. So "is this true?" refers to what you're replying to.
+- **Where it works:** only in communities whose owners installed it. Elsewhere, mentions are ignored.
+- **Limits:**
+  - It answers each comment once.
+  - It doesn't keep a back-and-forth going forever in one thread.
+  - Communities have per-hour limits.
+  - If the bot was offline, it answers when it comes back. Mentions older than two days are skipped.
+
+The bot can be wrong. Treat its answers like any other reply.
+
 ## How it fits into pkc-js
 
 - **Installing = exempting the bot's name from the community's challenges.** Every challenge in `settings.challenges` gets this exclude item:
