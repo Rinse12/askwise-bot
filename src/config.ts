@@ -39,6 +39,8 @@ export interface Config {
     dataDir: string;
     // http(s):// or socks5:// proxy for downloading thread images; unset lets Anthropic fetch them by URL
     imageProxyUrl: string | undefined;
+    // strings a reply must never contain (e.g. the operator's name or email); such replies are not published
+    privateStrings: string[];
     llm: {
         // anthropic-api: Messages API with ANTHROPIC_API_KEY. claude-code: the local `claude` CLI and its subscription login.
         provider: "anthropic-api" | "claude-code";
@@ -82,6 +84,10 @@ export function loadConfig(env?: NodeJS.ProcessEnv): Config {
         registryAddress: env.REGISTRY_ADDRESS || undefined,
         dataDir: path.resolve(env.DATA_DIR || "data"),
         imageProxyUrl: env.IMAGE_PROXY_URL || undefined,
+        privateStrings: (env.PRIVATE_STRINGS ?? "")
+            .split(",")
+            .map((value) => value.trim())
+            .filter(Boolean),
         llm: {
             provider: provider as Config["llm"]["provider"],
             claudeCodeBin: env.CLAUDE_CODE_BIN || "claude",

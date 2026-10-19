@@ -7,6 +7,7 @@ import { BotDb } from "./db.js";
 import { ImageLoader } from "./images.js";
 import { AnthropicLlmClient } from "./llm/anthropic.js";
 import { ClaudeCodeLlmClient } from "./llm/claude-code.js";
+import { claudeCodeAccountSecrets } from "./llm/private-info.js";
 import { createMentionRegex } from "./mentions.js";
 import { assertNameResolvesToSigner, connectPkc, loadSigner } from "./pkc.js";
 
@@ -25,12 +26,22 @@ async function main() {
             ? new ClaudeCodeLlmClient(config.llm, images, config.llm.claudeCodeBin)
             : new AnthropicLlmClient(config.llm, images);
 
-    console.log(`${config.botName} (${signer.address}) running, LLM: ${config.llm.provider} ${config.llm.model}`);
+    // Claude Code puts the logged-in account's email and org id into every session; no reply may repeat them.
+    // Without them the check would be blind, so the bot refuses to start.
+    const privateStrings = [
+        ...config.privateStrings,
+        ...(config.llm.provider === "claude-code" ? await claudeCodeAccountSecrets(config.llm.claudeCodeBin) : [])
+    ];
+    if (config.llm.provider === "claude-code" && privateStrings.length === config.privateStrings.length)
+        throw new Error("could not read the Claude Code account details to keep them out of replies (`claude auth status`)");
+
+    console.log(`${config.botName} (${signer.address}) running, LLM: ${config.llm.provider} ${config.llm.model}, ${privateStrings.length} private string(s) guarded`);
     const bot = await startBot({
         pkc,
         signer,
         db,
         llm,
+        privateStrings,
         config,
         authorProfile: loadAuthorProfile(config.dataDir),
         mentionRegex: createMentionRegex(config.botName)

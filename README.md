@@ -144,6 +144,7 @@ Every command (`npm start`, `install-bot`, `usage`, `create-signer`) reads `.env
 | `CLAUDE_CODE_BIN` | for `claude-code`: path of the `claude` binary, default `claude` |
 | `LLM_MODEL` | defaults to `claude-haiku-5-5`, the cheapest Claude model. Set e.g. `claude-opus-5-5` for better answers, and update `LLM_INPUT_PRICE_PER_MTOK` / `LLM_OUTPUT_PRICE_PER_MTOK` so cost tracking stays right. |
 | `IMAGE_PROXY_URL` | optional, see "Images and privacy" |
+| `PRIVATE_STRINGS` | comma-separated strings no reply may contain, e.g. your name or email |
 | `LIMIT_*` | spend and rate limits; the daily spend cap defaults to $20 |
 
 Optionally add `data/author-profile.json` with `displayName`, an `avatar` (NFT) or `wallets`. Avatar and wallet entries must be signed offline by the wallet that owns the name.
@@ -192,7 +193,14 @@ With `LLM_PROVIDER=claude-code`, each mention runs `claude -p` headless as a fre
 
 `ANTHROPIC_API_KEY` is removed from its environment so it always uses the subscription. Auto-memory, CLAUDE.md files and git instructions are turned off, and the working directory is outside any project.
 
-**Privacy:** Claude Code still adds context of its own to every request, and no setting removes it while keeping subscription login. That includes **the logged-in account's email address**, environment info (OS, working directory) and the date. Anyone mentioning the bot could try to get these out of it. This is one more reason to keep this backend to private testing. Token usage and the equivalent API cost are recorded the same way, so the limits and `npm run usage` keep working.
+**Privacy:** Claude Code still adds context of its own to every request, and no setting removes it while keeping subscription login. That includes **the logged-in account's email address**, environment info (OS, working directory) and the date. Anyone mentioning the bot could try to get these out of it. This is one more reason to keep this backend to private testing.
+
+What the bot does about it:
+- **Startup:** the bot reads the account's email (and its local part) and org id with `claude auth status`. It won't start if it can't.
+- **Before publishing:** every reply is checked for those strings, plus anything in `PRIVATE_STRINGS`, case-insensitively and also when spelled out ("name at domain dot com", spaced-out letters). A match blocks the reply: it isn't published, isn't retried, and the log doesn't contain it.
+- **System prompt:** it tells the model never to reveal anything about its operator or the machine.
+
+This catches the details themselves, not every possible hint, such as describing the address without spelling it. The API-key backend avoids the problem entirely, because no account context is sent. Token usage and the equivalent API cost are recorded the same way, so the limits and `npm run usage` keep working.
 
 ### Images and privacy
 

@@ -4,6 +4,7 @@ import type { BotDb } from "./db.js";
 import { challengesMissingBotExclude, diagnoseInstall, type ChallengeWithExclude } from "./install/exclude.js";
 import { checkLimits } from "./limits.js";
 import { isTooOld, nextAttemptAt } from "./retry.js";
+import { findPrivateInfo, PrivateInfoBlockedError } from "./llm/private-info.js";
 import { LlmRefusalError, type LlmClient, type LlmReply } from "./llm/types.js";
 import { extractImageUrls, type ThreadImage } from "./images.js";
 import { buildThreadContext, mentionsBot } from "./mentions.js";
@@ -23,6 +24,8 @@ export function threadImages(mention: PageComment, ancestors: PageComment[]): Th
 }
 
 export interface BotContext {
+    // strings no reply may contain: PRIVATE_STRINGS plus, with Claude Code, the account's email and org id
+    privateStrings: string[];
     pkc: PkcInstance;
     signer: BotSigner;
     db: BotDb;
@@ -221,6 +224,9 @@ export class CommunityWatcher extends CommunitySubscription {
             }
             this.recordUsage(mention, author, reply);
             if (!reply.text) throw new Error("LLM returned an empty reply");
+            const leaked = findPrivateInfo(reply.text, this.ctx.privateStrings);
+            // The reply text is not logged: it contains the private detail
+            if (leaked.length > 0) throw new PrivateInfoBlockedError(`reply blocked: it contained private string(s) #${leaked.join(", #")}`);
 
             const replyCid = await publishAsBot(this.ctx, this.community!, { communityAddress: this.address, parentCid: mention.cid, postCid: mention.postCid ?? mention.cid }, reply.text);
             record("replied", { replyCid });
