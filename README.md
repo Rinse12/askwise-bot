@@ -20,10 +20,10 @@ An AI reply bot for Bitsocial communities, in the spirit of "@grok is this true?
 
 ## Install @bitsocialbot in your community
 
-Requirements: the community runs on a [bitsocial-cli](https://github.com/bitsocialhq/bitsocial-cli) daemon **on this machine** (pkc RPC at `ws://localhost:9138`), and Node.js 22+.
+Requirements: the community runs on a [bitsocial-cli](https://github.com/bitsocialnet/bitsocial-cli) daemon **on this machine** (pkc RPC at `ws://localhost:9138`), and Node.js 22+.
 
 ```sh
-git clone <this repo> bitsocialbot && cd bitsocialbot
+git clone https://github.com/bitsocialnet/Bitsocial-bot.git && cd Bitsocial-bot
 npm ci
 
 # preview the change, then apply it
@@ -46,17 +46,99 @@ npm run install-bot -- --community <your-community-address> --uninstall
 
 The bot sees the change on the community's next update and stops answering.
 
-## Running the bot (operator)
+## Self-hosting your own bot
 
-1. `cp .env.example .env` and fill in:
-   - `REGISTRY_ADDRESS`
-   - `ANTHROPIC_API_KEY` (or log in with `ant auth login`)
-   - `LLM_MODEL`: defaults to `claude-haiku-5-5`, the cheapest Claude model; set e.g. `claude-opus-5-5` for better answers (and update the prices used for cost tracking)
-   - optionally the limits and pricing
-2. `npm run create-signer` creates `data/bot-signer.json` and prints its address. From the wallet that owns `bitsocialbot.eth`, point the name at that address. The bot refuses to start while the name resolves elsewhere.
-3. Optionally add `data/author-profile.json` with `displayName`, `avatar` (NFT) or `wallets`. Avatar and wallet signatures are made offline with the name-owning wallet.
-4. Create the registry community on your node. Either give it no challenges, or install the bot in it like any other community.
-5. `npm start`
+You can run your own instance under your own name; everything below applies to `bitsocialbot.eth` too. Communities install your bot by passing your name to the install script with `BOT_NAME=yourbot.eth npm run install-bot -- --community <address>`.
+
+### 1. Requirements
+
+- A machine that stays online, with Node.js 22+ (nvm recommended).
+- A [bitsocial-cli](https://github.com/bitsocialnet/bitsocial-cli) daemon for the bot to read and publish through. It does not need to host any community except the registry.
+
+  ```sh
+  npm install -g @bitsocial/bitsocial-cli
+  bitsocial daemon        # pkc RPC on ws://localhost:9138
+  ```
+
+  Or use the Docker setup from the bitsocial-cli README. If the daemon runs on another machine, use its `ws://host:9138/<auth-key>` URL as `PKC_RPC_URL`.
+- An Anthropic API key (`ANTHROPIC_API_KEY`), or `ant auth login` on the bot machine.
+- A `.eth` name you control, e.g. `yourbot.eth` (a `.bso` name works the same).
+
+### 2. Install the bot
+
+```sh
+git clone https://github.com/bitsocialnet/Bitsocial-bot.git && cd Bitsocial-bot
+npm ci
+cp .env.example .env
+```
+
+### 3. Create the bot's key and point your name at it
+
+```sh
+npm run create-signer
+```
+
+- This needs no running node. It writes `data/bot-signer.json` (the private key, readable only by you) and prints an address like `12D3KooW...`.
+- From the wallet that owns your name, set the name's Bitsocial record to that address.
+- Back up `data/bot-signer.json`. If the key ever leaks, run `create-signer` again (after moving the old file away) and re-point the name. Communities don't have to change anything, because they exempt the name, not the key.
+
+### 4. Create the registry community
+
+On your daemon:
+
+```sh
+bitsocial community create --title "Bitsocial bot registry" --description "Post your community address here to activate the bot"
+```
+
+- Give it no challenges, or run `npm run install-bot -- --community <registry-address>` so the bot can reply there.
+- To show a bot badge on the bot's replies, enable author flairs and add a `🤖 bot` author flair (see "Optional bot badge" above).
+
+### 5. Configure `.env`
+
+| Variable | What it is |
+|---|---|
+| `PKC_RPC_URL` | your daemon, default `ws://localhost:9138` |
+| `BOT_NAME` / `BOT_DISPLAY_NAME` | your name and the display name shown on replies |
+| `REGISTRY_ADDRESS` | the registry community from step 4 |
+| `ANTHROPIC_API_KEY` | unless you used `ant auth login` |
+| `LLM_MODEL` | defaults to `claude-haiku-5-5`, the cheapest Claude model. Set e.g. `claude-opus-5-5` for better answers, and update `LLM_INPUT_PRICE_PER_MTOK` / `LLM_OUTPUT_PRICE_PER_MTOK` so cost tracking stays right. |
+| `IMAGE_PROXY_URL` | optional, see "Images and privacy" |
+| `LIMIT_*` | spend and rate limits; the daily spend cap defaults to $20 |
+
+Optionally add `data/author-profile.json` with `displayName`, an `avatar` (NFT) or `wallets`. Avatar and wallet entries must be signed offline by the wallet that owns the name.
+
+### 6. Run it
+
+```sh
+npm start
+```
+
+- The bot refuses to start until your name resolves to its key.
+- To keep it running, use a systemd user service:
+
+  ```ini
+  # ~/.config/systemd/user/bitsocialbot.service
+  [Unit]
+  Description=Bitsocial bot
+  After=network-online.target
+
+  [Service]
+  WorkingDirectory=%h/Bitsocial-bot
+  ExecStart=/usr/bin/env npm start
+  Restart=always
+  RestartSec=10
+
+  [Install]
+  WantedBy=default.target
+  ```
+
+  ```sh
+  systemctl --user enable --now bitsocialbot
+  loginctl enable-linger "$USER"   # keep it running after you log out
+  journalctl --user -u bitsocialbot -f
+  ```
+
+- All state is in `data/`: the key, `bitsocialbot.db` (installed communities, handled mentions, token usage) and the optional profile. Back up that folder to move the bot to another machine.
 
 Every bot publication carries `author.name`, `displayName`, `previousCommentCid` (chained across all of its comments) and, where the community offers one, a bot flair.
 
