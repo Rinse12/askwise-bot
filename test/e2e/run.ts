@@ -4,9 +4,10 @@
 //   3. the owner registers in the registry, the bot answers ✅ and starts watching
 //   4. a post mentioning the bot and a depth-2 reply mentioning it each get exactly one reply,
 //      published without a challenge, with the bot's profile and previousCommentCid chain
-//   5. key rotation: re-pointing the name exempts the new key and challenges the old one
-//   6. a challenge added later is picked up by re-running install
-//   7. uninstall: the bot marks the community uninstalled
+//   5. install on a community whose challenges already have all kinds of excludes, and uninstall
+//   6. key rotation: re-pointing the name exempts the new key and challenges the old one
+//   7. a challenge added later is picked up by re-running install
+//   8. uninstall: the bot marks the community uninstalled
 //
 //   npm run e2e   (needs a kubo binary on PATH or KUBO_BIN)
 import { execFile } from "node:child_process";
@@ -17,7 +18,7 @@ import path from "node:path";
 import { startBot } from "../../src/bot.js";
 import { loadConfig } from "../../src/config.js";
 import { BotDb } from "../../src/db.js";
-import { challengesMissingBotExclude, type ChallengeWithExclude } from "../../src/install/exclude.js";
+import { addBotExclude, challengesMissingBotExclude, diagnoseInstall, type ChallengeWithExclude } from "../../src/install/exclude.js";
 import type { LlmClient } from "../../src/llm/types.js";
 import { createMentionRegex } from "../../src/mentions.js";
 import { createPkc, type PkcInstance } from "../../src/pkc.js";
@@ -176,6 +177,60 @@ try {
     const usage = db.usageTotals("community", 0);
     assert.deepEqual(usage.map((row) => [row.key, row.calls]), [[community.address, 2]]);
     console.log("usage:", JSON.stringify(usage));
+
+    step("install on a community whose challenges already have all kinds of excludes");
+    const matrixChallenges = [
+        { name: "question", options: { question: "password?", answer: "hunter2" }, exclude: [{ roles: ["owner", "admin", "moderator"] }] },
+        {
+            name: "text-math",
+            exclude: [
+                { names: ["friend.bso", "other.bso"] },
+                { names: ["friend2.bso"], postScore: 10, publicationType: { post: true } },
+                { publicKeys: [owner.address] },
+                { postScore: 100, replyScore: 50 },
+                { firstCommentTimestamp: 2592000, postCount: 3 },
+                { rateLimit: 2, rateLimitChallengeSuccess: true },
+                { challenges: [0] }
+            ]
+        },
+        { name: "blacklist", options: { addresses: "spammer.bso" }, exclude: [{ names: ["bitsocialbot.eth"] }, { names: ["BitsocialBot.bso"] }] },
+        { name: "question", options: { question: "second?", answer: "yes" }, exclude: [{ names: [BOT_NAME], postScore: 10 }, { names: [BOT_NAME], publicationType: { post: true } }] },
+        { name: "question", options: { question: "third?", answer: "yes" }, exclude: [{ names: ["friend.bso", BOT_NAME] }] }
+    ];
+    const matrix = await pkc.createCommunity({ title: "exclude matrix" });
+    await matrix.edit({ settings: { ...matrix.settings!, challenges: matrixChallenges as never } });
+    await matrix.start();
+    await until("matrix community published", async () => matrix.updatedAt);
+    const saved = () => pkc.createCommunity({ address: matrix.address }).then((c) => c.settings!.challenges as ChallengeWithExclude[]);
+    const before = await saved();
+    assert.deepEqual(diagnoseInstall(before, BOT_NAME).problems.length, 4, "challenges #0-#3 do not exempt the bot yet");
+
+    const matrixInstall = await installScript(url, matrix.address);
+    assert.match(matrixInstall, /challenge #4 .*already excludes the bot/);
+    const after = await saved();
+    assert.deepEqual(after, addBotExclude(before, BOT_NAME).challenges, "pkc-js saved exactly the original challenges plus the bot's items");
+    await until("matrix public challenges exempt the bot", async () => (diagnoseInstall(await publicChallenges(pkc, matrix.address), BOT_NAME).installed ? true : undefined));
+    assert.match(await installScript(url, matrix.address), /No changes needed/);
+
+    const matrixPost = await publish(pkc, {
+        communityAddress: matrix.address,
+        title: "matrix post",
+        content: "hi",
+        signer: owner,
+        challengeRequest: { challengeAnswers: ["hunter2", "", "", "yes", "yes"] }
+    });
+    const matrixTarget = { communityAddress: matrix.address, parentCid: matrixPost, postCid: matrixPost };
+    await publishReply(pkc, botSigner, { name: BOT_NAME }, matrixTarget, "bot reply, no challenge");
+    await assert.rejects(publishReply(pkc, user, {} as never, matrixTarget, "a normal user is still challenged"), ChallengedError);
+    console.log("bot exempt from all 5 challenges; a normal user is still challenged");
+
+    await installScript(url, matrix.address, "--uninstall");
+    const uninstalled = await saved();
+    assert.deepEqual(uninstalled.slice(0, 3), before.slice(0, 3), "uninstall restores challenges that did not exempt the bot before");
+    assert.deepEqual(challengesMissingBotExclude(uninstalled, BOT_NAME), [0, 1, 2, 3, 4]);
+    assert.deepEqual(uninstalled[2].exclude, [{ names: ["bitsocialbot.eth"] }, { names: ["BitsocialBot.bso"] }], "other spellings are left to the owner");
+    assert.deepEqual(uninstalled[4].exclude, [{ names: ["friend.bso"] }], "shared names keep the other entries");
+    assert.equal(uninstalled[3].exclude, undefined, "items that only named the bot are removed with their conditions");
 
     step("key rotation");
     const rotated = await pkc.createSigner();
