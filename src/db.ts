@@ -220,6 +220,12 @@ export class BotDb {
             );
     }
 
+    // The bot's own replies, by CID. Needed where a community pseudonymizes authors: there the bot's comments
+    // carry an alias instead of its name and key.
+    isBotReply(cid: string): boolean {
+        return this.db.prepare("SELECT 1 FROM handled_mentions WHERE reply_cid = ?").get(cid) !== undefined;
+    }
+
     // Mentions of a community whose retry is due, oldest first
     dueRetries(community: string, nowTs = now()): { cid: string; comment: unknown }[] {
         const rows = this.db

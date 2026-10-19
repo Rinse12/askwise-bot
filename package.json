@@ -14,7 +14,8 @@
         "create-signer": "tsx scripts/create-signer.ts",
         "typecheck": "tsc --noEmit",
         "test": "vitest run",
-        "e2e": "tsx test/e2e/run.ts"
+        "e2e": "tsx test/e2e/run.ts",
+        "register-community": "tsx scripts/register-community.ts"
     },
     "dependencies": {
         "@anthropic-ai/sdk": "0.135.0",

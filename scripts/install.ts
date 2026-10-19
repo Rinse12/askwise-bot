@@ -6,7 +6,7 @@
 // The RPC is --rpc, else PKC_RPC_SSH_HOST (ssh tunnel) or PKC_RPC_URL from .env, else ws://localhost:9138.
 import { parseArgs } from "node:util";
 import { loadConfig } from "../src/config.js";
-import { addBotExclude, challengesMissingBotExclude, removeBotExclude, type ChallengeWithExclude } from "../src/install/exclude.js";
+import { runInstall, type InstallPkc } from "../src/install/run.js";
 import { connectPkc } from "../src/pkc.js";
 
 const { values } = parseArgs({
@@ -21,51 +21,22 @@ const { values } = parseArgs({
 
 async function main() {
     const config = loadConfig();
-    const botName = (values["bot-name"] ?? config.botName).toLowerCase();
-
     if (!values.community) throw new Error("--community <address> is required");
 
-    const { pkc, url: rpcUrl, close } = await connectPkc(config, values.rpc);
+    const { pkc, url, close } = await connectPkc(config, values.rpc);
     try {
-        // pkc.communities lists the communities this node hosts; only those have editable settings
+        // pkc.communities (the communities this node hosts) arrives shortly after connecting
         if (pkc.communities.length === 0)
             await Promise.race([new Promise((resolve) => pkc.once("communitieschange", resolve)), new Promise((resolve) => setTimeout(resolve, 10_000))]);
-        const hosted = pkc.communities;
-        if (!hosted.includes(values.community))
-            throw new Error(`${values.community} is not hosted by the node at ${rpcUrl}. Hosted communities: ${hosted.join(", ") || "none"}`);
-
-        const community = await pkc.createCommunity({ address: values.community });
-        const settings = community.settings;
-        if (!settings) throw new Error(`could not read the settings of ${values.community}; is ${rpcUrl} the node that runs it?`);
-        const current = (settings.challenges ?? []) as ChallengeWithExclude[];
-
-        if (current.length === 0 && !values.uninstall)
-            console.log(`${values.community} has no challenges, so ${botName} can already publish. Nothing to change.`);
-
-        const change = values.uninstall ? removeBotExclude(current, botName) : addBotExclude(current, botName);
-        const describe = (challenge: ChallengeWithExclude) => String(challenge.name ?? challenge.path ?? "unnamed");
-        for (const index of change.changed)
-            console.log(`  challenge #${index} (${describe(current[index])}): ${values.uninstall ? "removed" : "added"} exclude for ${botName}`);
-        for (const index of change.unchanged)
-            console.log(`  challenge #${index} (${describe(current[index])}): ${values.uninstall ? "had no exclude for the bot" : "already excludes the bot"}`);
-
-        if (change.changed.length === 0) {
-            console.log("No changes needed.");
-        } else if (values["dry-run"]) {
-            console.log("\n--dry-run: new settings.challenges would be:");
-            console.log(JSON.stringify(change.challenges, null, 2));
-        } else {
-            await community.edit({ settings: { ...settings, challenges: change.challenges as typeof settings.challenges } });
-            console.log(`\nSaved settings of ${values.community}.`);
-        }
-
-        if (!values.uninstall && !values["dry-run"] && challengesMissingBotExclude(change.challenges, botName).length === 0) {
-            console.log(
-                `\nNext step: once the community has published this update, make a post in the registry community${config.registryAddress ? ` (${config.registryAddress})` : ""} ` +
-                    `from the owner or an admin account, containing just: ${values.community}`
-            );
-        }
-        if (values.uninstall && !values["dry-run"]) console.log(`${botName} will stop answering in ${values.community} on its next update.`);
+        const report = await runInstall(pkc as unknown as InstallPkc, {
+            address: values.community,
+            botName: values["bot-name"] ?? config.botName,
+            uninstall: values.uninstall,
+            dryRun: values["dry-run"],
+            rpcLabel: url,
+            registryAddress: config.registryAddress
+        });
+        console.log(report.lines.join("\n"));
     } finally {
         await pkc.destroy();
         await close();

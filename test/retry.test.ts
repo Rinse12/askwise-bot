@@ -57,3 +57,13 @@ describe("mention retries in the db", () => {
         expect(db.dueRetries("a.bso", Math.floor(Date.now() / 1000)).map((due) => due.cid)).toEqual(["m3"]);
     });
 });
+
+describe("isBotReply", () => {
+    it("recognizes the bot's replies by cid, e.g. under a pseudonymity alias", () => {
+        const db = new BotDb(":memory:");
+        db.setMention("m1", "a.bso", "alice.bso", "replied", { replyCid: "QmBotReply" });
+        expect(db.isBotReply("QmBotReply")).toBe(true);
+        expect(db.isBotReply("m1")).toBe(false);
+        db.close();
+    });
+});

@@ -45,8 +45,8 @@ export function publishAsBot(ctx: BotContext, community: RemoteCommunity, target
     return run;
 }
 
-export const isBotComment = (ctx: BotContext, comment: Pick<PageComment, "author">) =>
-    comment.author?.address === ctx.signer.address || comment.author?.name?.toLowerCase() === ctx.config.botName;
+export const isBotComment = (ctx: BotContext, comment: Pick<PageComment, "cid" | "author">) =>
+    comment.author?.address === ctx.signer.address || comment.author?.name?.toLowerCase() === ctx.config.botName || ctx.db.isBotReply(comment.cid);
 
 // Base for anything that follows one community: subscribes to updates and runs at most one scan at a
 // time, coalescing updates that arrive during a scan into one follow-up scan.
