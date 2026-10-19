@@ -71,7 +71,10 @@ CREATE TABLE IF NOT EXISTS handled_mentions (
     handled_at INTEGER NOT NULL,
     reply_cid TEXT,
     status TEXT NOT NULL,
-    reason TEXT
+    reason TEXT,
+    attempts INTEGER NOT NULL DEFAULT 0,
+    next_attempt_at INTEGER,
+    comment_json TEXT
 );
 CREATE INDEX IF NOT EXISTS handled_mentions_community_time ON handled_mentions (community, handled_at);
 CREATE INDEX IF NOT EXISTS handled_mentions_author_time ON handled_mentions (author, handled_at);
@@ -180,19 +183,59 @@ export class BotDb {
 
     // mentions
 
-    getMention(cid: string): { status: MentionStatus; reply_cid: string | null } | undefined {
-        return this.db.prepare("SELECT status, reply_cid FROM handled_mentions WHERE cid = ?").get(cid) as
-            | { status: MentionStatus; reply_cid: string | null }
+    getMention(cid: string): { status: MentionStatus; reply_cid: string | null; attempts: number } | undefined {
+        return this.db.prepare("SELECT status, reply_cid, attempts FROM handled_mentions WHERE cid = ?").get(cid) as
+            | { status: MentionStatus; reply_cid: string | null; attempts: number }
             | undefined;
     }
 
-    setMention(cid: string, community: string, author: string, status: MentionStatus, details: { replyCid?: string; reason?: string } = {}) {
+    // `comment` is kept so the mention can be retried after its comment was marked seen; `retryAt` schedules
+    // that retry (omitted: never retried). Every "failed" counts as an attempt.
+    setMention(
+        cid: string,
+        community: string,
+        author: string,
+        status: MentionStatus,
+        details: { replyCid?: string; reason?: string; retryAt?: number; comment?: unknown } = {}
+    ) {
         this.db
             .prepare(
-                `INSERT INTO handled_mentions (cid, community, author, handled_at, reply_cid, status, reason) VALUES (?, ?, ?, ?, ?, ?, ?)
-                 ON CONFLICT(cid) DO UPDATE SET status = excluded.status, reply_cid = excluded.reply_cid, reason = excluded.reason`
+                `INSERT INTO handled_mentions (cid, community, author, handled_at, reply_cid, status, reason, attempts, next_attempt_at, comment_json)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 ON CONFLICT(cid) DO UPDATE SET status = excluded.status, reply_cid = excluded.reply_cid, reason = excluded.reason,
+                    attempts = attempts + excluded.attempts, next_attempt_at = excluded.next_attempt_at,
+                    comment_json = COALESCE(excluded.comment_json, comment_json)`
             )
-            .run(cid, community, author, now(), details.replyCid ?? null, status, details.reason ?? null);
+            .run(
+                cid,
+                community,
+                author,
+                now(),
+                details.replyCid ?? null,
+                status,
+                details.reason ?? null,
+                status === "failed" ? 1 : 0,
+                details.retryAt ?? null,
+                details.comment === undefined ? null : JSON.stringify(details.comment)
+            );
+    }
+
+    // Mentions of a community whose retry is due, oldest first
+    dueRetries(community: string, nowTs = now()): { cid: string; comment: unknown }[] {
+        const rows = this.db
+            .prepare(
+                `SELECT cid, comment_json FROM handled_mentions
+                 WHERE community = ? AND status IN ('rate_limited', 'failed') AND next_attempt_at IS NOT NULL AND next_attempt_at <= ? AND comment_json IS NOT NULL
+                 ORDER BY handled_at`
+            )
+            .all(community, nowTs) as { cid: string; comment_json: string }[];
+        return rows.map((row) => ({ cid: row.cid, comment: JSON.parse(row.comment_json) }));
+    }
+
+    // A mention still "replying" at startup was interrupted (crash, shutdown); retry it right away.
+    // In the rare case the reply was published just before the interruption, it gets answered twice.
+    retryInterruptedMentions(): number {
+        return this.db.prepare("UPDATE handled_mentions SET status = 'failed', reason = 'interrupted', next_attempt_at = ? WHERE status = 'replying'").run(now()).changes;
     }
 
     countReplies(filter: { community?: string; author?: string }, sinceTs: number): number {

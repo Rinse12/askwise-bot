@@ -41,8 +41,12 @@ async function until<T>(description: string, check: () => T | undefined | Promis
     throw new Error(`timed out waiting for: ${description}`);
 }
 
+let flakyFailures = 0;
 const fakeLlm: LlmClient = {
-    reply: async ({ threadContext }) => ({
+    reply: async ({ threadContext }) => {
+        // the first call for a "flaky" mention fails, like an LLM or network outage
+        if (threadContext.includes("flaky") && flakyFailures++ === 0) throw new Error("simulated LLM outage");
+        return {
         text: `Fake answer to: ${threadContext.split("\n").at(-1)}`,
         model: "fake-model",
         inputTokens: 100,
@@ -50,7 +54,8 @@ const fakeLlm: LlmClient = {
         cacheReadTokens: 0,
         cacheWriteTokens: 0,
         costUsd: 0.001
-    })
+        };
+    }
 };
 
 // Async on purpose: the RPC server runs in this process, so a sync exec would block it
@@ -114,9 +119,10 @@ try {
     step("start bot and register in the registry");
     const dataDir = path.join(root, "bot-data");
     fs.mkdirSync(dataDir, { recursive: true });
-    const config = loadConfig({ BOT_NAME, REGISTRY_ADDRESS: registry.address, DATA_DIR: dataDir, LIMIT_AUTHOR_MENTIONS_PER_HOUR: "10" });
+    const config = loadConfig({ BOT_NAME, REGISTRY_ADDRESS: registry.address, DATA_DIR: dataDir, LIMIT_AUTHOR_MENTIONS_PER_HOUR: "10", RETRY_BASE_SECONDS: "1", RESCAN_INTERVAL_SECONDS: "2" });
     const db = new BotDb(path.join(dataDir, "bitsocialbot.db"));
-    const bot = await startBot({ pkc: botPkc, signer: botSigner, db, llm: fakeLlm, config, authorProfile: {}, mentionRegex: createMentionRegex(BOT_NAME) });
+    const botContext = { pkc: botPkc, signer: botSigner, db, llm: fakeLlm, config, authorProfile: {}, mentionRegex: createMentionRegex(BOT_NAME) };
+    let bot = await startBot(botContext);
 
     const strangerPost = await publish(pkc, { communityAddress: registry.address, title: "register", content: community.address, signer: user });
     const ownerPost = await publish(pkc, { communityAddress: registry.address, title: "register", content: community.address, signer: owner });
@@ -177,6 +183,20 @@ try {
     const usage = db.usageTotals("community", 0);
     assert.deepEqual(usage.map((row) => [row.key, row.calls]), [[community.address, 2]]);
     console.log("usage:", JSON.stringify(usage));
+
+    step("backlog: mentions posted while the bot is offline, and a reply that fails once");
+    await bot.stop();
+    const backlog1 = await publish(pkc, { communityAddress: community.address, title: "@bitsocialbot backlog one", content: "first", signer: user, ...answers });
+    const backlog2 = await publish(pkc, { communityAddress: community.address, title: "@bitsocialbot backlog two", content: "second", signer: owner, ...answers });
+    const flaky = await publish(pkc, { communityAddress: community.address, title: "@bitsocialbot flaky", content: "please", signer: owner, ...answers });
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+    assert.equal(db.getMention(backlog1), undefined, "nothing is answered while the bot is offline");
+    bot = await startBot(botContext);
+    await until("backlog answered after restart", () => [backlog1, backlog2, flaky].every((cid) => db.getMention(cid)?.status === "replied"));
+    assert.equal(db.getMention(flaky)!.attempts, 1, "the flaky mention failed once, then its retry succeeded");
+    const [reply1, reply2] = await Promise.all([backlog1, backlog2].map(async (cid) => pkc.getComment({ cid: db.getMention(cid)!.reply_cid! })));
+    assert.ok(reply1.timestamp <= reply2.timestamp, "the backlog is answered oldest first");
+    console.log("3 offline mentions answered after restart, the failed one retried");
 
     step("install on a community whose challenges already have all kinds of excludes");
     const matrixChallenges = [

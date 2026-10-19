@@ -1,5 +1,6 @@
 import { diagnoseInstall, type ChallengeWithExclude } from "./install/exclude.js";
 import type { PageComment } from "./pages.js";
+import { nextAttemptAt } from "./retry.js";
 import { CommunitySubscription, isBotComment, publishAsBot, type BotContext } from "./watcher.js";
 
 const REGISTRATION_ROLES = new Set(["owner", "admin"]);
@@ -39,16 +40,16 @@ export class RegistryWatcher extends CommunitySubscription {
 
     protected async scan() {
         const { fresh, commit } = await this.walkNewComments();
-        for (const post of fresh) {
-            if (post.depth !== 0 || isBotComment(this.ctx, post)) continue;
-            await this.handleRegistration(post);
-        }
+        const posts = fresh.filter((post) => post.depth === 0 && !isBotComment(this.ctx, post)).sort((a, b) => a.timestamp - b.timestamp);
+        for (const post of posts) await this.handleRegistration(post, false);
         commit();
+        for (const due of this.ctx.db.dueRetries(this.address)) await this.handleRegistration(due.comment as PageComment, true);
     }
 
-    private async handleRegistration(post: PageComment) {
+    private async handleRegistration(post: PageComment, retry: boolean) {
         const { db } = this.ctx;
-        if (db.getMention(post.cid)) return;
+        const existing = db.getMention(post.cid);
+        if (existing && !retry) return;
         const poster = post.author?.address ?? "unknown";
         const verification = await this.verify(post);
         const { botName } = this.ctx.config;
@@ -65,8 +66,11 @@ export class RegistryWatcher extends CommunitySubscription {
             db.setMention(post.cid, this.address, poster, "replied", { replyCid, reason: verification.ok ? undefined : verification.problems.join("; ") });
         } catch (error) {
             const reason = error instanceof Error ? error.message : String(error);
-            console.error(`[registry] could not answer ${post.cid}: ${reason}`);
-            db.setMention(post.cid, this.address, poster, "failed", { reason });
+            const attempts = (existing?.status === "failed" ? existing.attempts : 0) + 1;
+            const { replies: _replies, ...comment } = post;
+            const retryAt = nextAttemptAt({ kind: "failed", attempts, retryable: true }, post.timestamp, this.ctx.config.limits, Math.floor(Date.now() / 1000));
+            console.error(`[registry] could not answer ${post.cid} (attempt ${attempts}${retryAt ? ", will retry" : ", giving up"}): ${reason}`);
+            db.setMention(post.cid, this.address, poster, "failed", { reason, retryAt, comment });
         }
     }
 

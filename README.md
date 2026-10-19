@@ -196,6 +196,16 @@ All LLM calls are recorded in `data/bitsocialbot.db` (`llm_usage`: tokens, model
 npm run usage -- --since 7d --by community   # or --by author / --by model, --since 24h / 4w / all
 ```
 
+### Downtime, backlog and retries
+
+The bot can be offline: on a laptop that sleeps, during a restart, or while the network is down.
+- **Catching up:** a mention counts as new when the bot hasn't seen its comment yet, not when it was posted. When the bot comes back, it answers everything posted meanwhile, oldest first. Mentions older than `MENTION_MAX_AGE_HOURS` (48) are skipped instead of answered late.
+- **Failed replies** retry with backoff (LLM or network outage, community node down, install fixed later). A refusal doesn't retry.
+- **Rate-limited mentions** wait until the limits allow them.
+- **Interrupted replies:** a reply interrupted by a crash or shutdown is retried on the next start.
+
+**After a suspend or network drop, restart the bot** (`npm start`, or `systemctl --user restart bitsocialbot`). The pkc RPC client reconnects, but until [pkc-js#425](https://github.com/pkcprotocol/pkc-js/issues/425) is fixed its community subscriptions stay silent afterwards. Nothing is lost: the restart picks up the backlog.
+
 ## Development
 
 ```sh

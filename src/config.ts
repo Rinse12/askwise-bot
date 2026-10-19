@@ -18,6 +18,13 @@ export interface Limits {
     authorMentionsPerHour: number;
     globalUsdPerDay: number;
     maxBotRepliesInThread: number;
+    // mentions older than this are not answered (e.g. a long backlog after the bot was offline)
+    mentionMaxAgeHours: number;
+    mentionMaxAttempts: number;
+    // failed mentions retry after base, 2x base, 4x base, ...; rate-limited ones every 10x base
+    retryBaseSeconds: number;
+    // how often each community is rescanned even without updates, so due retries run
+    rescanIntervalSeconds: number;
 }
 
 export interface Config {
@@ -89,7 +96,11 @@ export function loadConfig(env?: NodeJS.ProcessEnv): Config {
             communityTokensPerDay: num(env, "LIMIT_COMMUNITY_TOKENS_PER_DAY", 500_000),
             authorMentionsPerHour: num(env, "LIMIT_AUTHOR_MENTIONS_PER_HOUR", 5),
             globalUsdPerDay: num(env, "LIMIT_GLOBAL_USD_PER_DAY", 20),
-            maxBotRepliesInThread: num(env, "LIMIT_MAX_BOT_REPLIES_IN_THREAD", 3)
+            maxBotRepliesInThread: num(env, "LIMIT_MAX_BOT_REPLIES_IN_THREAD", 3),
+            mentionMaxAgeHours: num(env, "MENTION_MAX_AGE_HOURS", 48),
+            mentionMaxAttempts: num(env, "MENTION_MAX_ATTEMPTS", 5),
+            retryBaseSeconds: num(env, "RETRY_BASE_SECONDS", 60),
+            rescanIntervalSeconds: num(env, "RESCAN_INTERVAL_SECONDS", 60)
         }
     };
 }

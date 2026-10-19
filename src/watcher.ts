@@ -3,6 +3,7 @@ import type { Config } from "./config.js";
 import type { BotDb } from "./db.js";
 import { challengesMissingBotExclude, diagnoseInstall, type ChallengeWithExclude } from "./install/exclude.js";
 import { checkLimits } from "./limits.js";
+import { isTooOld, nextAttemptAt } from "./retry.js";
 import { LlmRefusalError, type LlmClient, type LlmReply } from "./llm/types.js";
 import { extractImageUrls, type ThreadImage } from "./images.js";
 import { buildThreadContext, mentionsBot } from "./mentions.js";
@@ -54,6 +55,7 @@ export abstract class CommunitySubscription {
     private scanning = false;
     private rescan = false;
     private stopped = false;
+    private rescanTimer?: NodeJS.Timeout;
 
     get isStopped() {
         return this.stopped;
@@ -70,10 +72,13 @@ export abstract class CommunitySubscription {
         this.community.on("error", (error: unknown) => console.error(`[${this.address}] community error:`, error));
         await this.community.update();
         this.scheduleScan();
+        // Also rescan on a timer: due retries must run even when the community publishes no update
+        this.rescanTimer = setInterval(() => this.scheduleScan(), this.ctx.config.limits.rescanIntervalSeconds * 1000);
     }
 
     async stop() {
         this.stopped = true;
+        clearInterval(this.rescanTimer);
         await this.community?.stop();
     }
 
@@ -122,6 +127,9 @@ export abstract class CommunitySubscription {
     }
 }
 
+// What a retry needs from a mention, without the (possibly large) nested reply pages
+const mentionSnapshot = ({ replies: _replies, ...comment }: PageComment): PageComment => comment;
+
 export class CommunityWatcher extends CommunitySubscription {
     protected async scan() {
         const { db, config } = this.ctx;
@@ -150,11 +158,14 @@ export class CommunityWatcher extends CommunitySubscription {
         }
 
         const { fresh, all, commit } = await this.walkNewComments();
-        for (const comment of fresh) {
-            if (comment.timestamp < row.installed_at || isBotComment(this.ctx, comment) || !mentionsBot(comment, this.ctx.mentionRegex)) continue;
-            await this.handleMention(comment, all);
-        }
+        // A backlog (e.g. after the bot was offline) is answered oldest first
+        const mentions = fresh
+            .filter((comment) => comment.timestamp >= row.installed_at && !isBotComment(this.ctx, comment) && mentionsBot(comment, this.ctx.mentionRegex))
+            .sort((a, b) => a.timestamp - b.timestamp);
+        for (const mention of mentions) await this.handleMention(mention, all, false);
         commit();
+
+        for (const due of db.dueRetries(this.address)) await this.handleMention(due.comment as PageComment, all, true);
     }
 
     private async loadAncestors(mention: PageComment, known: Map<string, PageComment>): Promise<PageComment[]> {
@@ -168,17 +179,25 @@ export class CommunityWatcher extends CommunitySubscription {
         return ancestors;
     }
 
-    private async handleMention(mention: PageComment, known: Map<string, PageComment>) {
+    private async handleMention(mention: PageComment, known: Map<string, PageComment>, retry: boolean) {
         const { db, config, llm } = this.ctx;
-        if (db.getMention(mention.cid)) return;
+        const existing = db.getMention(mention.cid);
+        if (existing && !retry) return;
         const author = mention.author?.address ?? "unknown";
+        const comment = mentionSnapshot(mention);
         const record = (status: Parameters<BotDb["setMention"]>[3], details?: Parameters<BotDb["setMention"]>[4]) =>
-            db.setMention(mention.cid, this.address, author, status, details);
+            db.setMention(mention.cid, this.address, author, status, { comment, ...details });
+        const nowTs = Math.floor(Date.now() / 1000);
 
+        if (isTooOld(mention.timestamp, config.limits, nowTs)) {
+            record("skipped", { reason: `older than ${config.limits.mentionMaxAgeHours}h` });
+            return;
+        }
         const verdict = checkLimits(db, config.limits, { community: this.address, author });
         if (!verdict.ok) {
-            console.log(`[${this.address}] not answering ${mention.cid}: ${verdict.reason}`);
-            record("rate_limited", { reason: verdict.reason });
+            const retryAt = nextAttemptAt({ kind: "rate_limited" }, mention.timestamp, config.limits, nowTs);
+            if (!retry) console.log(`[${this.address}] not answering ${mention.cid} yet: ${verdict.reason}`);
+            record("rate_limited", { reason: verdict.reason, retryAt });
             return;
         }
         record("replying");
@@ -208,8 +227,11 @@ export class CommunityWatcher extends CommunitySubscription {
             console.log(`[${this.address}] replied to ${mention.cid} with ${replyCid}`);
         } catch (error) {
             const reason = error instanceof Error ? error.message : String(error);
-            console.error(`[${this.address}] failed to answer ${mention.cid}: ${reason}`);
-            record("failed", { reason });
+            const attempts = (existing?.status === "failed" ? existing.attempts : 0) + 1;
+            // A refusal would only be refused again; anything else (network, node, LLM outage, install fixed later) may pass next time
+            const retryAt = nextAttemptAt({ kind: "failed", attempts, retryable: !(error instanceof LlmRefusalError) }, mention.timestamp, config.limits, nowTs);
+            console.error(`[${this.address}] failed to answer ${mention.cid} (attempt ${attempts}${retryAt ? ", will retry" : ", giving up"}): ${reason}`);
+            record("failed", { reason, retryAt });
             if (error instanceof ChallengedError) db.setCommunityStatus(this.address, "needs_reinstall", reason);
         }
     }

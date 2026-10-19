@@ -23,6 +23,8 @@ export async function startBot(ctx: BotContext): Promise<RunningBot> {
     };
 
     const { db, config } = ctx;
+    const interrupted = db.retryInterruptedMentions();
+    if (interrupted > 0) console.log(`retrying ${interrupted} mention(s) interrupted by the last shutdown`);
     const toWatch = [...db.listCommunities("installed"), ...db.listCommunities("needs_reinstall")].map((row) => row.address);
     await Promise.all(toWatch.map(watch));
 

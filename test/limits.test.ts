@@ -3,7 +3,7 @@ import { BotDb } from "../src/db.js";
 import { checkLimits } from "../src/limits.js";
 import type { Limits } from "../src/config.js";
 
-const limits: Limits = { communityRepliesPerHour: 2, communityTokensPerDay: 1000, authorMentionsPerHour: 1, globalUsdPerDay: 1, maxBotRepliesInThread: 3 };
+const limits: Limits = { communityRepliesPerHour: 2, communityTokensPerDay: 1000, authorMentionsPerHour: 1, globalUsdPerDay: 1, maxBotRepliesInThread: 3, mentionMaxAgeHours: 48, mentionMaxAttempts: 5, retryBaseSeconds: 60, rescanIntervalSeconds: 60 };
 
 const usage = (community: string, tokens: number, costUsd: number) => ({
     community,
