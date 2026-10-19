@@ -91,7 +91,7 @@ BOT_NAME=yourbot.bso npm run install-bot -- --community <address>
   - set `PKC_RPC_SSH_HOST=myserver` (any ssh destination, including a `~/.ssh/config` alias). The bot then tunnels to the daemon's RPC over ssh and restarts the tunnel if it drops. The RPC needn't be exposed to the internet, and the daemon sees a local connection, so no auth key is needed. Use key-based ssh login; the tunnel runs non-interactively.
 - One of:
   - an Anthropic API key (`ANTHROPIC_API_KEY`, or `ant auth login`), billed per token;
-  - [Claude Code](https://code.claude.com) installed and logged in with your Claude subscription (`LLM_PROVIDER=claude-code`). Usage then counts against your plan's limits instead of being billed per token. Check that your plan's terms allow powering a public bot before relying on it.
+  - [Claude Code](https://code.claude.com) logged in with your Claude subscription (`LLM_PROVIDER=claude-code`), **for private testing only**. Anthropic doesn't allow routing other people's requests through Free, Pro or Max plan credentials ([legal and compliance](https://code.claude.com/docs/en/legal-and-compliance.md)). A public bot needs an API key.
 - Your own `.bso` name, e.g. `yourbot.bso`. `.bso` is the protocol's name system and it sits on ENS: to get `yourbot.bso`, register `yourbot.eth` at [app.ens.domains](https://app.ens.domains) with an Ethereum wallet. You set the record on the `.eth` side (step 3), but everywhere in Bitsocial, including `BOT_NAME` and the communities' excludes, you write it as `yourbot.bso`.
   - pkc-js compares exclude names as exact strings, so always use the same lowercase `.bso` spelling.
 
@@ -190,7 +190,9 @@ With `LLM_PROVIDER=claude-code`, each mention runs `claude -p` headless as a fre
 - the bot's own system prompt instead of Claude Code's;
 - no settings, CLAUDE.md, MCP servers or skills, and an empty working directory under `data/`.
 
-`ANTHROPIC_API_KEY` is removed from its environment so it always uses the subscription. Token usage and the equivalent API cost are recorded the same way, so the limits and `npm run usage` keep working.
+`ANTHROPIC_API_KEY` is removed from its environment so it always uses the subscription. Auto-memory, CLAUDE.md files and git instructions are turned off, and the working directory is outside any project.
+
+**Privacy:** Claude Code still adds context of its own to every request, and no setting removes it while keeping subscription login. That includes **the logged-in account's email address**, environment info (OS, working directory) and the date. Anyone mentioning the bot could try to get these out of it. This is one more reason to keep this backend to private testing. Token usage and the equivalent API cost are recorded the same way, so the limits and `npm run usage` keep working.
 
 ### Images and privacy
 

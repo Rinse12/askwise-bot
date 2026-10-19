@@ -22,7 +22,7 @@ async function main() {
     const images = new ImageLoader(config.imageProxyUrl);
     const llm =
         config.llm.provider === "claude-code"
-            ? new ClaudeCodeLlmClient(config.llm, images, config.dataDir, config.llm.claudeCodeBin)
+            ? new ClaudeCodeLlmClient(config.llm, images, config.llm.claudeCodeBin)
             : new AnthropicLlmClient(config.llm, images);
 
     console.log(`${config.botName} (${signer.address}) running, LLM: ${config.llm.provider} ${config.llm.model}`);

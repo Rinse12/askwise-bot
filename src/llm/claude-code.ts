@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import type { Config } from "../config.js";
 import type { ImageLoader } from "../images.js";
@@ -23,17 +24,19 @@ interface ClaudeCodeResult {
 // it run anything), our system prompt instead of Claude Code's, no settings, CLAUDE.md, MCP servers or
 // skills, and an empty working directory. Images go as content blocks: a URL is fetched by Anthropic,
 // never by this machine, exactly as with the API.
+//
+// The working directory is a fresh temp directory outside any git repo or project on purpose: Claude Code
+// injects context based on it (git status, the project's auto-memory notes), which would leak the
+// operator's private notes into replies that strangers can prompt.
 export class ClaudeCodeLlmClient implements LlmClient {
     private cwd: string;
 
     constructor(
         private llmConfig: Config["llm"],
         private images: ImageLoader,
-        dataDir: string,
         private bin = "claude"
     ) {
-        this.cwd = path.join(dataDir, "claude-code-cwd");
-        fs.mkdirSync(this.cwd, { recursive: true });
+        this.cwd = fs.mkdtempSync(path.join(os.tmpdir(), "bitsocialbot-claude-"));
     }
 
     private run(content: ContentBlock[]): Promise<ClaudeCodeResult> {
@@ -51,8 +54,18 @@ export class ClaudeCodeLlmClient implements LlmClient {
             "--disable-slash-commands",
             "--no-session-persistence"
         ];
-        // An API key in the environment would make the CLI bill the API instead of the subscription
-        const { ANTHROPIC_API_KEY: _apiKey, ...env } = process.env;
+        // An API key in the environment would make the CLI bill the API instead of the subscription.
+        // The documented switches below keep auto-memory, CLAUDE.md files and git instructions out of the
+        // session. The account's email, environment info and the date are still injected; no setting
+        // removes them while keeping subscription login.
+        const { ANTHROPIC_API_KEY: _apiKey, ...inherited } = process.env;
+        const env = {
+            ...inherited,
+            CLAUDE_CODE_DISABLE_AUTO_MEMORY: "1",
+            CLAUDE_CODE_DISABLE_CLAUDE_MDS: "1",
+            CLAUDE_CODE_DISABLE_ATTACHMENTS: "1",
+            CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS: "1"
+        };
 
         return new Promise((resolve, reject) => {
             const child = spawn(this.bin, args, { cwd: this.cwd, env, stdio: ["pipe", "pipe", "pipe"] });
