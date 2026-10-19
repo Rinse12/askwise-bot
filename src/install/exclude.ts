@@ -91,3 +91,36 @@ export function removeBotExclude<T extends ChallengeWithExclude>(challenges: T[]
     });
     return { challenges: updated, changed, unchanged };
 }
+
+const sameNameLoosely = (a: string, b: string) => a.toLowerCase().replace(/\.eth$/, ".bso") === b.toLowerCase().replace(/\.eth$/, ".bso");
+
+// Why a challenge does not exempt the bot, in words an owner can act on; undefined when it does.
+export function diagnoseChallenge(challenge: ChallengeWithExclude, botName: string): string | undefined {
+    if (challengeExemptsBot(challenge, botName)) return undefined;
+    const items = challenge.exclude ?? [];
+    for (const item of items) {
+        const misspelled = item.names?.find((name) => name !== botName && sameNameLoosely(name, botName));
+        if (misspelled) return `its exclude names "${misspelled}", but it must be exactly "${botName}" (pkc-js compares names exactly)`;
+    }
+    for (const item of items) {
+        if (!item.names?.includes(botName)) continue;
+        if (item.publicationType && item.publicationType.reply !== true) return `its exclude for ${botName} does not cover replies (publicationType.reply)`;
+        const extra = Object.keys(item).filter((key) => key !== "names" && key !== "publicationType" && item[key] !== undefined);
+        if (extra.length > 0) return `its exclude for ${botName} also requires ${extra.join(", ")}, so it does not always apply`;
+    }
+    return `it has no exclude for ${botName}`;
+}
+
+export interface InstallDiagnosis {
+    installed: boolean;
+    problems: string[];
+}
+
+export function diagnoseInstall(challenges: ChallengeWithExclude[] | undefined, botName: string): InstallDiagnosis {
+    const problems = (challenges ?? []).flatMap((challenge, index) => {
+        const problem = diagnoseChallenge(challenge, botName);
+        const kind = (challenge.type ?? challenge.name ?? challenge.description) as string | undefined;
+        return problem ? [`challenge #${index}${kind ? ` (${kind})` : ""}: ${problem}`] : [];
+    });
+    return { installed: problems.length === 0, problems };
+}

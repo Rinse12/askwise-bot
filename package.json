@@ -8,10 +8,10 @@
         "node": ">=22"
     },
     "scripts": {
-        "start": "tsx --env-file-if-exists=.env src/index.ts",
-        "install-bot": "tsx --env-file-if-exists=.env scripts/install.ts",
-        "usage": "tsx --env-file-if-exists=.env scripts/usage.ts",
-        "create-signer": "tsx --env-file-if-exists=.env scripts/create-signer.ts",
+        "start": "tsx src/index.ts",
+        "install-bot": "tsx scripts/install.ts",
+        "usage": "tsx scripts/usage.ts",
+        "create-signer": "tsx scripts/create-signer.ts",
         "typecheck": "tsc --noEmit",
         "test": "vitest run",
         "e2e": "tsx test/e2e/run.ts"

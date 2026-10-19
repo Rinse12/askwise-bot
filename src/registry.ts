@@ -1,9 +1,10 @@
-import { challengesMissingBotExclude, type ChallengeWithExclude } from "./install/exclude.js";
+import { diagnoseInstall, type ChallengeWithExclude } from "./install/exclude.js";
 import type { PageComment } from "./pages.js";
 import { CommunitySubscription, isBotComment, publishAsBot, type BotContext } from "./watcher.js";
 
 const REGISTRATION_ROLES = new Set(["owner", "admin"]);
 const GET_COMMUNITY_TIMEOUT_MS = 2 * 60_000;
+const REPO_URL = "https://github.com/bitsocialnet/Bitsocial-bot";
 
 // A community address is a domain (.eth / .bso) or an IPNS public key (12D3KooW...).
 const ADDRESS_REGEX = /(?<![\w.-])([a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:eth|bso)|12D3KooW[1-9A-HJ-NP-Za-km-z]{44})(?![\w-])/i;
@@ -11,7 +12,19 @@ const ADDRESS_REGEX = /(?<![\w.-])([a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:eth|bso)|12D3
 export const parseRegisteredAddress = (post: Pick<PageComment, "title" | "content">): string | undefined =>
     `${post.title ?? ""}\n${post.content ?? ""}`.match(ADDRESS_REGEX)?.[1];
 
-export type Verification = { ok: true; address: string } | { ok: false; reason: string };
+export type Verification =
+    | { ok: true; address: string; alreadyInstalled: boolean }
+    | { ok: false; address?: string; problems: string[]; fix: string };
+
+// The ❌ reply: what is wrong and what to do about it.
+export const formatFailure = (botName: string, failure: Extract<Verification, { ok: false }>) =>
+    [
+        `❌ ${botName} is not installed${failure.address ? ` in ${failure.address}` : ""}:`,
+        "",
+        ...failure.problems.map((problem) => `- ${problem}`),
+        "",
+        `To fix it: ${failure.fix}`
+    ].join("\n");
 
 // Watches the registry community. An owner or admin posts their community's address there; the bot
 // checks the poster's role and the public challenge excludes, answers ✅/❌, and starts watching.
@@ -38,17 +51,18 @@ export class RegistryWatcher extends CommunitySubscription {
         if (db.getMention(post.cid)) return;
         const poster = post.author?.address ?? "unknown";
         const verification = await this.verify(post);
+        const { botName } = this.ctx.config;
         let answer: string;
         if (verification.ok) {
             db.installCommunity(verification.address, poster, post.cid);
             await this.onInstalled(verification.address);
-            answer = `✅ ${this.ctx.config.botName} is installed in ${verification.address}. Mention @${this.ctx.config.botName.split(".")[0]} in a post or reply there to call it.`;
-        } else answer = `❌ Not installed: ${verification.reason}`;
-        console.log(`[registry] ${post.cid} by ${poster}: ${answer}`);
+            answer = `✅ ${botName} is ${verification.alreadyInstalled ? "already " : ""}installed in ${verification.address}. Mention @${botName.split(".")[0]} in a post or reply there to call it.`;
+        } else answer = formatFailure(botName, verification);
+        console.log(`[registry] ${post.cid} by ${poster}: ${answer.split("\n").join(" ")}`);
 
         try {
             const replyCid = await publishAsBot(this.ctx, this.community!, { communityAddress: this.address, parentCid: post.cid, postCid: post.cid }, answer);
-            db.setMention(post.cid, this.address, poster, "replied", { replyCid, reason: verification.ok ? undefined : verification.reason });
+            db.setMention(post.cid, this.address, poster, "replied", { replyCid, reason: verification.ok ? undefined : verification.problems.join("; ") });
         } catch (error) {
             const reason = error instanceof Error ? error.message : String(error);
             console.error(`[registry] could not answer ${post.cid}: ${reason}`);
@@ -57,14 +71,25 @@ export class RegistryWatcher extends CommunitySubscription {
     }
 
     private async verify(post: PageComment): Promise<Verification> {
+        const { botName } = this.ctx.config;
         const address = parseRegisteredAddress(post);
-        if (!address) return { ok: false, reason: "the post does not contain a community address (a .eth/.bso name or a 12D3KooW... key)" };
+        if (!address)
+            return {
+                ok: false,
+                problems: ["the post does not contain a community address (a .bso name or a 12D3KooW... key)"],
+                fix: "post again with just your community's address, e.g. `mycommunity.bso`."
+            };
 
         let target;
         try {
             target = await this.ctx.pkc.getCommunity({ address, abortSignal: AbortSignal.timeout(GET_COMMUNITY_TIMEOUT_MS) });
         } catch (error) {
-            return { ok: false, reason: `could not load ${address}: ${error instanceof Error ? error.message : String(error)}` };
+            return {
+                ok: false,
+                address,
+                problems: [`the community could not be loaded (${error instanceof Error ? error.message : String(error)})`],
+                fix: "check the address, make sure the node running the community is online, then post again."
+            };
         }
 
         // Roles are keyed by author address (name or public key); check both forms the poster may be listed under
@@ -72,14 +97,23 @@ export class RegistryWatcher extends CommunitySubscription {
         const posterKeys = [post.author?.address, post.author?.name, post.author?.publicKey].filter((key): key is string => Boolean(key));
         const role = posterKeys.map((key) => roles[key]?.role).find((r) => r !== undefined);
         if (!role || !REGISTRATION_ROLES.has(role))
-            return { ok: false, reason: `the poster (${post.author?.address ?? "unknown"}) is not an owner or admin of ${address}` };
-
-        const missing = challengesMissingBotExclude(target.challenges as ChallengeWithExclude[] | undefined, this.ctx.config.botName);
-        if (missing.length > 0)
             return {
                 ok: false,
-                reason: `challenge(s) ${missing.map((i) => `#${i}`).join(", ")} of ${address} do not exclude ${this.ctx.config.botName}. Run the install script, wait for the community to publish its update, then post again.`
+                address,
+                problems: [`the poster (${post.author?.address ?? "unknown"}) is ${role ? `only a ${role}` : "not an owner or admin"} of the community`],
+                fix: "post again from the owner's account or an admin's account."
             };
-        return { ok: true, address: target.address };
+
+        const { installed, problems } = diagnoseInstall(target.challenges as ChallengeWithExclude[] | undefined, botName);
+        if (!installed)
+            return {
+                ok: false,
+                address,
+                problems,
+                fix:
+                    `on the machine running the community's bitsocial-cli, run \`npm run install-bot -- --community ${address}\` from ${REPO_URL}. ` +
+                    "It exempts the bot from every challenge and leaves your users' challenges as they are. Wait for the community to publish its update (about a minute), then post here again."
+            };
+        return { ok: true, address: target.address, alreadyInstalled: this.ctx.db.getCommunity(target.address)?.status === "installed" };
     }
 }

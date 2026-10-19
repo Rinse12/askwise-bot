@@ -1,7 +1,7 @@
 import { buildBotAuthor, pickBotFlair, PREVIOUS_COMMENT_CID_KEY, type BotAuthor } from "./author.js";
 import type { Config } from "./config.js";
 import type { BotDb } from "./db.js";
-import { challengesMissingBotExclude, type ChallengeWithExclude } from "./install/exclude.js";
+import { challengesMissingBotExclude, diagnoseInstall, type ChallengeWithExclude } from "./install/exclude.js";
 import { checkLimits } from "./limits.js";
 import { LlmRefusalError, type LlmClient, type LlmReply } from "./llm/types.js";
 import { extractImageUrls, type ThreadImage } from "./images.js";
@@ -135,7 +135,7 @@ export class CommunityWatcher extends CommunitySubscription {
             const uninstalled = missing.length === challenges!.length;
             const reason = uninstalled
                 ? "no challenge excludes the bot anymore"
-                : `challenge(s) ${missing.map((i) => `#${i}`).join(", ")} do not exclude the bot; run the install script again`;
+                : `${diagnoseInstall(challenges, config.botName).problems.join("; ")}. Run the install script again`;
             if (row.status !== (uninstalled ? "uninstalled" : "needs_reinstall") || row.status_reason !== reason) {
                 console.warn(`[${this.address}] ${reason}`);
                 db.setCommunityStatus(this.address, uninstalled ? "uninstalled" : "needs_reinstall", reason);

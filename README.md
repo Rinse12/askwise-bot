@@ -15,7 +15,9 @@ An AI reply bot for Bitsocial communities, in the spirit of "@grok is this true?
   - Your own users are still challenged exactly as before.
   - This is *not* the `whitelist` challenge, which would lock out everyone not on the list.
 - **Excludes are public**, so the bot checks for itself that a community installed it. If an owner adds a challenge later without the exemption, the bot notices, stops answering there, and resumes once the install script is re-run.
-- **Registering:** after installing, the owner or an admin posts the community address in the registry community. The bot checks two things, that the poster has the `owner`/`admin` role and that the excludes are in place, then replies ✅ or ❌ and starts watching.
+- **Registering:** after installing, the owner or an admin posts the community address in the registry community.
+  - The bot checks that the poster has the `owner`/`admin` role and that every challenge exempts it, then replies ✅ and starts watching.
+  - Otherwise it replies ❌ with what is wrong and how to fix it: no address in the post, community unreachable, poster without the role, or which challenge lacks the exemption (including a `.eth` or differently-cased spelling of the name).
 - **Mentions** are found by walking whatever page sorts the community publishes. No particular sort (`new`, `hot`, …) is assumed. Pages are content-addressed, so already-walked pages are never fetched twice.
 
 ## Install @bitsocialbot in your community
@@ -32,7 +34,7 @@ npm run install-bot -- --community <your-community-address>
 ```
 
 - The script only edits challenges that don't exempt the bot yet. **Run it again whenever you add challenges.**
-- Use `--rpc ws://host:port/<auth-key>` if your daemon is elsewhere.
+- If your daemon is elsewhere, set `PKC_RPC_SSH_HOST=<ssh host>` (tunnel) or `PKC_RPC_URL=ws://host:9138/<auth-key>` in `.env`, or pass `--rpc`.
 
 Then, from the owner or an admin account, make a post in the registry community whose content is just your community address. The bot replies ✅ when it is active.
 
@@ -64,8 +66,13 @@ BOT_NAME=yourbot.bso npm run install-bot -- --community <address>
   bitsocial daemon        # pkc RPC on ws://localhost:9138
   ```
 
-  Or use the Docker setup from the bitsocial-cli README. If the daemon runs on another machine, use its `ws://host:9138/<auth-key>` URL as `PKC_RPC_URL`.
-- An Anthropic API key (`ANTHROPIC_API_KEY`), or `ant auth login` on the bot machine.
+  Or use the Docker setup from the bitsocial-cli README.
+- If the daemon runs on another machine, either:
+  - set `PKC_RPC_URL=ws://host:9138/<auth-key>`, or
+  - set `PKC_RPC_SSH_HOST=myserver` (any ssh destination, including a `~/.ssh/config` alias). The bot then tunnels to the daemon's RPC over ssh and restarts the tunnel if it drops. The RPC needn't be exposed to the internet, and the daemon sees a local connection, so no auth key is needed. Use key-based ssh login; the tunnel runs non-interactively.
+- One of:
+  - an Anthropic API key (`ANTHROPIC_API_KEY`, or `ant auth login`), billed per token;
+  - [Claude Code](https://code.claude.com) installed and logged in with your Claude subscription (`LLM_PROVIDER=claude-code`). Usage then counts against your plan's limits instead of being billed per token. Check that your plan's terms allow powering a public bot before relying on it.
 - Your own `.bso` name, e.g. `yourbot.bso`. `.bso` is the protocol's name system and it sits on ENS: to get `yourbot.bso`, register `yourbot.eth` at [app.ens.domains](https://app.ens.domains) with an Ethereum wallet. You set the record on the `.eth` side (step 3), but everywhere in Bitsocial, including `BOT_NAME` and the communities' excludes, you write it as `yourbot.bso`.
   - pkc-js compares exclude names as exact strings, so always use the same lowercase `.bso` spelling.
 
@@ -104,12 +111,17 @@ bitsocial community create --title "Bitsocial bot registry" --description "Post 
 
 ### 5. Configure `.env`
 
+Every command (`npm start`, `install-bot`, `usage`, `create-signer`) reads `.env` from the repo root. Variables already set in your shell take precedence.
+
 | Variable | What it is |
 |---|---|
 | `PKC_RPC_URL` | your daemon, default `ws://localhost:9138` |
+| `PKC_RPC_SSH_HOST` / `PKC_RPC_SSH_REMOTE` | reach the daemon through an ssh tunnel instead (remote default `127.0.0.1:9138`) |
 | `BOT_NAME` / `BOT_DISPLAY_NAME` | your name (`yourbot.bso`) and the display name shown on replies |
 | `REGISTRY_ADDRESS` | the registry community from step 4 |
-| `ANTHROPIC_API_KEY` | unless you used `ant auth login` |
+| `LLM_PROVIDER` | `anthropic-api` (default) or `claude-code` |
+| `ANTHROPIC_API_KEY` | for `anthropic-api`, unless you used `ant auth login` |
+| `CLAUDE_CODE_BIN` | for `claude-code`: path of the `claude` binary, default `claude` |
 | `LLM_MODEL` | defaults to `claude-haiku-5-5`, the cheapest Claude model. Set e.g. `claude-opus-5-5` for better answers, and update `LLM_INPUT_PRICE_PER_MTOK` / `LLM_OUTPUT_PRICE_PER_MTOK` so cost tracking stays right. |
 | `IMAGE_PROXY_URL` | optional, see "Images and privacy" |
 | `LIMIT_*` | spend and rate limits; the daily spend cap defaults to $20 |
@@ -151,14 +163,23 @@ npm start
 
 Every bot publication carries `author.name`, `displayName`, `previousCommentCid` (chained across all of its comments) and, where the community offers one, a bot flair.
 
+### Claude Code backend
+
+With `LLM_PROVIDER=claude-code`, each mention runs `claude -p` headless as a fresh session:
+- no tools, so thread content cannot make it run anything;
+- the bot's own system prompt instead of Claude Code's;
+- no settings, CLAUDE.md, MCP servers or skills, and an empty working directory under `data/`.
+
+`ANTHROPIC_API_KEY` is removed from its environment so it always uses the subscription. Token usage and the equivalent API cost are recorded the same way, so the limits and `npm run usage` keep working.
+
 ### Images and privacy
 
 The bot shows the LLM up to `LLM_MAX_IMAGES` images from the thread: post image links, markdown images, and pasted image URLs. The bot's machine never loads them directly:
 
-- **Default (no `IMAGE_PROXY_URL`):** the image URL is passed to Claude and Anthropic's servers fetch it.
+- **Default (no `IMAGE_PROXY_URL`):** the image URL is passed to Claude and Anthropic's servers fetch it. This holds for both backends; Claude Code forwards the URL without loading it.
 - **`IMAGE_PROXY_URL=socks5://127.0.0.1:9050`** (Tor) **or `http://proxy:port`:** the bot downloads the image through the proxy and sends the bytes inline. Private and LAN addresses are refused, and images must be jpeg/png/gif/webp under 5 MB.
 
-If an image can't be loaded, the bot answers without it and says so to the model.
+If Anthropic can't fetch an image, the bot retries without that image (then without any) and tells the model which one was unavailable.
 
 ### Limits and token tracking
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addBotExclude, botExcludeItem, challengesMissingBotExclude, isBotExcludeItem, removeBotExclude } from "../src/install/exclude.js";
+import { addBotExclude, botExcludeItem, challengesMissingBotExclude, diagnoseInstall, isBotExcludeItem, removeBotExclude } from "../src/install/exclude.js";
 
 const BOT = "bitsocialbot.bso";
 
@@ -64,5 +64,32 @@ describe("removeBotExclude", () => {
     it("keeps other names in a shared item", () => {
         const { challenges } = removeBotExclude([{ exclude: [{ names: ["friend.eth", BOT] }] }], BOT);
         expect(challenges[0].exclude).toEqual([{ names: ["friend.eth"] }]);
+    });
+});
+
+describe("diagnoseInstall", () => {
+    it("explains each challenge that does not exempt the bot", () => {
+        const challenges = [
+            { type: "text/plain", exclude: [botExcludeItem(BOT)] },
+            { type: "text/plain" },
+            { type: "url/iframe", exclude: [{ names: ["bitsocialbot.eth"] }] },
+            { exclude: [{ names: ["BitsocialBot.bso"] }] },
+            { exclude: [{ names: [BOT], postScore: 3 }] },
+            { exclude: [{ names: [BOT], publicationType: { post: true } }] }
+        ];
+        const { installed, problems } = diagnoseInstall(challenges, BOT);
+        expect(installed).toBe(false);
+        expect(problems).toEqual([
+            "challenge #1 (text/plain): it has no exclude for bitsocialbot.bso",
+            'challenge #2 (url/iframe): its exclude names "bitsocialbot.eth", but it must be exactly "bitsocialbot.bso" (pkc-js compares names exactly)',
+            'challenge #3: its exclude names "BitsocialBot.bso", but it must be exactly "bitsocialbot.bso" (pkc-js compares names exactly)',
+            "challenge #4: its exclude for bitsocialbot.bso also requires postScore, so it does not always apply",
+            "challenge #5: its exclude for bitsocialbot.bso does not cover replies (publicationType.reply)"
+        ]);
+    });
+
+    it("reports installed when every challenge exempts the bot, or there are none", () => {
+        expect(diagnoseInstall([{ exclude: [botExcludeItem(BOT)] }], BOT)).toEqual({ installed: true, problems: [] });
+        expect(diagnoseInstall([], BOT).installed).toBe(true);
     });
 });

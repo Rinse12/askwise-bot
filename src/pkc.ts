@@ -1,6 +1,8 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import PKC from "@pkcprotocol/pkc-js";
+import type { Config } from "./config.js";
+import { openSshTunnel } from "./ssh-tunnel.js";
 
 export type PkcInstance = Awaited<ReturnType<typeof PKC>>;
 export type BotSigner = Awaited<ReturnType<PkcInstance["createSigner"]>>;
@@ -11,6 +13,23 @@ export async function createPkc(rpcUrl: string): Promise<PkcInstance> {
     // pkc-js has no default error listener; without one an unhandled 'error' would crash the process
     pkc.on("error", (error: unknown) => console.error("pkc error:", error));
     return pkc;
+}
+
+// Connects to the configured pkc RPC: directly, or through an ssh tunnel when PKC_RPC_SSH_HOST is set.
+// An explicit rpcUrl (e.g. install-bot --rpc) always connects directly.
+export async function connectPkc(config: Pick<Config, "pkcRpcUrl" | "pkcRpcSshHost" | "pkcRpcSshRemote">, rpcUrl?: string) {
+    if (rpcUrl || !config.pkcRpcSshHost) {
+        const url = rpcUrl ?? config.pkcRpcUrl;
+        return { pkc: await createPkc(url), url, close: async () => {} };
+    }
+    const tunnel = await openSshTunnel(config.pkcRpcSshHost, config.pkcRpcSshRemote);
+    try {
+        const pkc = await createPkc(tunnel.localUrl);
+        return { pkc, url: `ssh ${config.pkcRpcSshHost} -> ${config.pkcRpcSshRemote}`, close: async () => tunnel.close() };
+    } catch (error) {
+        tunnel.close();
+        throw error;
+    }
 }
 
 export const signerPath = (dataDir: string) => path.join(dataDir, "bot-signer.json");

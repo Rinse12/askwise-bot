@@ -2,11 +2,12 @@
 // machine's bitsocial-cli daemon. Safe to run again at any time; challenges that already exempt the
 // bot are left alone, so re-running after adding new challenges only updates the new ones.
 //
-//   npm run install-bot -- --community <address> [--rpc ws://localhost:9138] [--uninstall] [--dry-run]
+//   npm run install-bot -- --community <address> [--rpc <url>] [--uninstall] [--dry-run]
+// The RPC is --rpc, else PKC_RPC_SSH_HOST (ssh tunnel) or PKC_RPC_URL from .env, else ws://localhost:9138.
 import { parseArgs } from "node:util";
 import { loadConfig } from "../src/config.js";
 import { addBotExclude, challengesMissingBotExclude, removeBotExclude, type ChallengeWithExclude } from "../src/install/exclude.js";
-import { createPkc } from "../src/pkc.js";
+import { connectPkc } from "../src/pkc.js";
 
 const { values } = parseArgs({
     options: {
@@ -21,10 +22,10 @@ const { values } = parseArgs({
 async function main() {
     const config = loadConfig();
     const botName = (values["bot-name"] ?? config.botName).toLowerCase();
-    const rpcUrl = values.rpc ?? "ws://localhost:9138";
+
     if (!values.community) throw new Error("--community <address> is required");
 
-    const pkc = await createPkc(rpcUrl);
+    const { pkc, url: rpcUrl, close } = await connectPkc(config, values.rpc);
     try {
         // pkc.communities lists the communities this node hosts; only those have editable settings
         if (pkc.communities.length === 0)
@@ -67,6 +68,7 @@ async function main() {
         if (values.uninstall && !values["dry-run"]) console.log(`${botName} will stop answering in ${values.community} on its next update.`);
     } finally {
         await pkc.destroy();
+        await close();
     }
 }
 

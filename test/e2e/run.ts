@@ -123,11 +123,30 @@ try {
     assert.equal(db.getCommunity(community.address)?.status, "installed");
     assert.equal(db.getCommunity(community.address)?.installed_by, owner.address);
     const strangerAnswer = await pkc.getComment({ cid: db.getMention(strangerPost)!.reply_cid! });
-    assert.match(strangerAnswer.content ?? "", /^❌ .*not an owner or admin/);
+    assert.match(strangerAnswer.content ?? "", /^❌[\s\S]*not an owner or admin[\s\S]*To fix it: post again from the owner's account/);
     const ownerAnswer = await pkc.getComment({ cid: db.getMention(ownerPost)!.reply_cid! });
     assert.match(ownerAnswer.content ?? "", /^✅/);
     assert.equal(ownerAnswer.author.flairs, undefined, "registry does not allow author flairs, so the bot sends none");
     console.log("registry answers:", strangerAnswer.content, "|", ownerAnswer.content);
+
+    step("registry errors for a community that is not installed, and a repeated registration");
+    const notInstalled = await pkc.createCommunity({ title: "not installed" });
+    await notInstalled.edit({ roles: { [owner.address]: { role: "owner" } } });
+    await notInstalled.start();
+    await until("second community published", async () => notInstalled.updatedAt);
+    const notInstalledPost = await publish(pkc, { communityAddress: registry.address, title: "register", content: notInstalled.address, signer: owner });
+    const noAddressPost = await publish(pkc, { communityAddress: registry.address, title: "please add my community", content: "thanks!", signer: owner });
+    const againPost = await publish(pkc, { communityAddress: registry.address, title: "register", content: community.address, signer: owner });
+    await until("error registrations answered", () => [notInstalledPost, noAddressPost, againPost].every((cid) => db.getMention(cid)?.status === "replied"));
+    const answerOf = async (cid: string) => (await pkc.getComment({ cid: db.getMention(cid)!.reply_cid! })).content ?? "";
+    const notInstalledAnswer = await answerOf(notInstalledPost);
+    assert.match(notInstalledAnswer, /^❌ bitsocialbot\.bso is not installed in 12D3KooW/);
+    assert.match(notInstalledAnswer, /- challenge #0 \(text\/plain\): it has no exclude for bitsocialbot\.bso/);
+    assert.match(notInstalledAnswer, /npm run install-bot -- --community 12D3KooW/);
+    assert.match(await answerOf(noAddressPost), /does not contain a community address/);
+    assert.match(await answerOf(againPost), /^✅ bitsocialbot\.bso is already installed/);
+    assert.equal(db.getCommunity(notInstalled.address), undefined);
+    console.log("not installed answer:\n" + notInstalledAnswer);
 
     step("mentions in a post title and in a depth-2 reply");
     const mentionPost = await publish(pkc, { communityAddress: community.address, title: "@bitsocialbot is the moon cheese?", content: "asking for a friend", signer: user, ...answers });

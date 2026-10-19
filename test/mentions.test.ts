@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildThreadContext, createMentionRegex, mentionsBot } from "../src/mentions.js";
-import { parseRegisteredAddress } from "../src/registry.js";
+import { formatFailure, parseRegisteredAddress } from "../src/registry.js";
 
 const regex = createMentionRegex("bitsocialbot.bso");
 const matches = (text: string) => regex.test(text);
@@ -46,5 +46,13 @@ describe("parseRegisteredAddress", () => {
         const key = "12D3KooWJJcSwxH2F3sFL7YCNDLD95kBczEfkHpPNdxcjZwR2X2Y";
         expect(parseRegisteredAddress({ content: `my community ${key}` })).toBe(key);
         expect(parseRegisteredAddress({ title: "hello" })).toBeUndefined();
+    });
+});
+
+describe("formatFailure", () => {
+    it("lists the problems and the fix", () => {
+        expect(formatFailure("bitsocialbot.bso", { ok: false, address: "memes.bso", problems: ["a", "b"], fix: "do x." })).toBe(
+            "❌ bitsocialbot.bso is not installed in memes.bso:\n\n- a\n- b\n\nTo fix it: do x."
+        );
     });
 });
