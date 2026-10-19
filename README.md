@@ -36,7 +36,7 @@ npm run install-bot -- --community <your-community-address>
 - The script only edits challenges that don't exempt the bot yet. **Run it again whenever you add challenges.**
 - If your daemon is elsewhere, set `PKC_RPC_SSH_HOST=<ssh host>` (tunnel) or `PKC_RPC_URL=ws://host:9138/<auth-key>` in `.env`, or pass `--rpc`.
 
-Then, from the owner or an admin account, make a post in the registry community whose content is just your community address. The bot replies ✅ when it is active.
+Then, from the owner or an admin account, make a post in the registry community **`registry.bitsocialbot.bso`** whose content is just your community address. The bot replies ✅ when it is active, or ❌ with what to fix.
 
 **Optional bot badge.** A community only accepts author flairs it lists itself. To have the bot's replies show a bot flair, enable `features.authorFlairs` and add an author flair whose text contains "bot" (e.g. `🤖 bot`) to `flairs.author`. The bot uses it automatically.
 
