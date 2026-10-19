@@ -1,0 +1,92 @@
+// Pure helpers for the challenge exclude that "installs" the bot in a community.
+// They work on both shapes that carry `exclude`: the owner's private `settings.challenges`
+// (written by the install script) and the public `community.challenges` (read by the bot).
+//
+// The bot is exempted by name, not by public key: the name is owned by an EVM wallet, so a
+// leaked signer key can be rotated by re-pointing the name, without any community reinstalling.
+
+export interface ChallengeExclude {
+    names?: string[];
+    publicKeys?: string[];
+    publicationType?: Record<string, boolean | undefined>;
+    [key: string]: unknown;
+}
+
+export interface ChallengeWithExclude {
+    exclude?: ChallengeExclude[];
+    [key: string]: unknown;
+}
+
+export const botExcludeItem = (botName: string): ChallengeExclude => ({
+    names: [botName],
+    publicationType: { reply: true }
+});
+
+// An exclude item exempts the bot's replies only if it names the bot and adds no other condition
+// (other than limiting it to replies). Within one item every field must match, so e.g.
+// `{names: [bot], postScore: 10}` would not reliably exempt the bot.
+export function isBotExcludeItem(item: ChallengeExclude, botName: string): boolean {
+    const target = botName.toLowerCase();
+    if (!Array.isArray(item.names) || !item.names.some((name) => name.toLowerCase() === target)) return false;
+    for (const key of Object.keys(item)) {
+        if (key === "names") continue;
+        if (key === "publicationType") {
+            if (item.publicationType?.reply !== true) return false;
+            continue;
+        }
+        if (item[key] !== undefined) return false;
+    }
+    return true;
+}
+
+export const challengeExemptsBot = (challenge: ChallengeWithExclude, botName: string): boolean =>
+    (challenge.exclude ?? []).some((item) => isBotExcludeItem(item, botName));
+
+// Indexes of challenges that would still challenge the bot. Empty means installed
+// (also when the community has no challenges at all).
+export const challengesMissingBotExclude = (challenges: ChallengeWithExclude[] | undefined, botName: string): number[] =>
+    (challenges ?? []).flatMap((challenge, index) => (challengeExemptsBot(challenge, botName) ? [] : [index]));
+
+export interface ExcludeChange<T> {
+    challenges: T[];
+    changed: number[];
+    unchanged: number[];
+}
+
+// Idempotent per challenge: running it again after the owner added new challenges only touches the new ones.
+export function addBotExclude<T extends ChallengeWithExclude>(challenges: T[], botName: string): ExcludeChange<T> {
+    const changed: number[] = [];
+    const unchanged: number[] = [];
+    const updated = challenges.map((challenge, index) => {
+        if (challengeExemptsBot(challenge, botName)) {
+            unchanged.push(index);
+            return challenge;
+        }
+        changed.push(index);
+        return { ...challenge, exclude: [...(challenge.exclude ?? []), botExcludeItem(botName)] };
+    });
+    return { challenges: updated, changed, unchanged };
+}
+
+export function removeBotExclude<T extends ChallengeWithExclude>(challenges: T[], botName: string): ExcludeChange<T> {
+    const target = botName.toLowerCase();
+    const changed: number[] = [];
+    const unchanged: number[] = [];
+    const updated = challenges.map((challenge, index) => {
+        if (!challenge.exclude?.some((item) => item.names?.some((name) => name.toLowerCase() === target))) {
+            unchanged.push(index);
+            return challenge;
+        }
+        changed.push(index);
+        const exclude = challenge.exclude.flatMap((item) => {
+            if (!item.names?.some((name) => name.toLowerCase() === target)) return [item];
+            const names = item.names.filter((name) => name.toLowerCase() !== target);
+            // An item that only existed for the bot goes away; one shared with other names keeps them
+            return names.length > 0 ? [{ ...item, names }] : [];
+        });
+        const { exclude: _removed, ...rest } = challenge;
+        // pkc-js rejects an empty exclude array, so drop the key instead
+        return (exclude.length > 0 ? { ...rest, exclude } : rest) as T;
+    });
+    return { challenges: updated, changed, unchanged };
+}

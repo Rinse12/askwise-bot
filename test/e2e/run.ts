@@ -1,0 +1,193 @@
+// End-to-end run against a local pkc RPC node (offline Kubo + mock name resolver), with a fake LLM:
+//   1. create a community (default question challenge) and a registry community
+//   2. run the install script (dry run, then for real) and check the public excludes
+//   3. the owner registers in the registry, the bot answers ✅ and starts watching
+//   4. a post mentioning the bot and a depth-2 reply mentioning it each get exactly one reply,
+//      published without a challenge, with the bot's profile and previousCommentCid chain
+//   5. key rotation: re-pointing the name exempts the new key and challenges the old one
+//   6. a challenge added later is picked up by re-running install
+//   7. uninstall: the bot marks the community uninstalled
+//
+//   npm run e2e   (needs a kubo binary on PATH or KUBO_BIN)
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
+import { startBot } from "../../src/bot.js";
+import { loadConfig } from "../../src/config.js";
+import { BotDb } from "../../src/db.js";
+import { challengesMissingBotExclude, type ChallengeWithExclude } from "../../src/install/exclude.js";
+import type { LlmClient } from "../../src/llm/types.js";
+import { createMentionRegex } from "../../src/mentions.js";
+import { createPkc, type PkcInstance } from "../../src/pkc.js";
+import { ChallengedError, publishReply } from "../../src/reply.js";
+import { nameRecords, startRpcServer } from "./server.js";
+
+const BOT_NAME = "bitsocialbot.eth";
+const BOT_FLAIR = { text: "🤖 bot", backgroundColor: "#5865f2", textColor: "#ffffff" };
+const ROOT = path.dirname(path.dirname(path.dirname(new URL(import.meta.url).pathname)));
+
+const step = (text: string) => console.log(`\n=== ${text}`);
+
+async function until<T>(description: string, check: () => T | undefined | Promise<T | undefined>, timeoutMs = 120_000): Promise<T> {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+        const value = await check();
+        if (value) return value;
+        await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+    throw new Error(`timed out waiting for: ${description}`);
+}
+
+const fakeLlm: LlmClient = {
+    reply: async ({ threadContext }) => ({
+        text: `Fake answer to: ${threadContext.split("\n").at(-1)}`,
+        model: "fake-model",
+        inputTokens: 100,
+        outputTokens: 20,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+        costUsd: 0.001
+    })
+};
+
+// Async on purpose: the RPC server runs in this process, so a sync exec would block it
+async function installScript(rpcUrl: string, community: string, ...flags: string[]) {
+    const { stdout } = await promisify(execFile)("npx", ["tsx", "scripts/install.ts", "--rpc", rpcUrl, "--community", community, ...flags], {
+        cwd: ROOT,
+        env: { ...process.env, BOT_NAME },
+        encoding: "utf8"
+    });
+    console.log(stdout.trim());
+    return stdout;
+}
+
+async function publicChallenges(pkc: PkcInstance, address: string) {
+    const community = await pkc.getCommunity({ address });
+    return community.challenges as ChallengeWithExclude[];
+}
+
+async function publish(pkc: PkcInstance, options: Record<string, unknown>) {
+    const comment = await pkc.createComment(options as never);
+    const verification = new Promise<{ challengeSuccess: boolean; commentUpdate?: { cid?: string } }>((resolve) => comment.once("challengeverification", resolve));
+    comment.on("challenge", () => {
+        throw new Error("test publication was challenged without pre-answers");
+    });
+    await comment.publish();
+    const result = await verification;
+    assert.ok(result.challengeSuccess, "test publication failed");
+    return (result.commentUpdate?.cid ?? comment.cid)!;
+}
+
+const { url, root, stop } = await startRpcServer();
+const pkc = await createPkc(url);
+const botPkc = await createPkc(url);
+let exitCode = 0;
+try {
+    step("setup: signers, community, registry");
+    const [owner, user, botSigner] = await Promise.all([pkc.createSigner(), pkc.createSigner(), pkc.createSigner()]);
+    nameRecords.set(BOT_NAME, botSigner.address);
+
+    const community = await pkc.createCommunity({ title: "e2e community" });
+    await community.edit({ roles: { [owner.address]: { role: "owner" } }, features: { authorFlairs: true }, flairs: { author: [BOT_FLAIR] } });
+    await community.start();
+    const answer = (community.settings!.challenges![0].options as Record<string, string>).answer;
+    const answers = { challengeRequest: { challengeAnswers: [answer] } };
+
+    const registry = await pkc.createCommunity({ title: "e2e registry" });
+    await registry.edit({ settings: { ...registry.settings!, challenges: [] } });
+    await registry.start();
+    await until("communities published", async () => community.updatedAt && registry.updatedAt);
+    console.log("community", community.address, "registry", registry.address);
+
+    step("install script: dry run, then install");
+    assert.match(await installScript(url, community.address, "--dry-run"), /--dry-run/);
+    assert.deepEqual(challengesMissingBotExclude(community.settings!.challenges as ChallengeWithExclude[], BOT_NAME), [0], "dry run must not edit");
+    await installScript(url, community.address);
+    await until("public excludes include the bot", async () =>
+        challengesMissingBotExclude(await publicChallenges(pkc, community.address), BOT_NAME).length === 0 ? true : undefined
+    );
+    console.log("public challenges:", JSON.stringify(await publicChallenges(pkc, community.address)));
+
+    step("start bot and register in the registry");
+    const dataDir = path.join(root, "bot-data");
+    fs.mkdirSync(dataDir, { recursive: true });
+    const config = loadConfig({ BOT_NAME, REGISTRY_ADDRESS: registry.address, DATA_DIR: dataDir, LIMIT_AUTHOR_MENTIONS_PER_HOUR: "10" });
+    const db = new BotDb(path.join(dataDir, "bitsocialbot.db"));
+    const bot = await startBot({ pkc: botPkc, signer: botSigner, db, llm: fakeLlm, config, authorProfile: {}, mentionRegex: createMentionRegex(BOT_NAME) });
+
+    const strangerPost = await publish(pkc, { communityAddress: registry.address, title: "register", content: community.address, signer: user });
+    const ownerPost = await publish(pkc, { communityAddress: registry.address, title: "register", content: community.address, signer: owner });
+    await until("registry posts answered", () => db.getMention(ownerPost)?.status === "replied" && db.getMention(strangerPost)?.status === "replied");
+    assert.equal(db.getCommunity(community.address)?.status, "installed");
+    assert.equal(db.getCommunity(community.address)?.installed_by, owner.address);
+    const strangerAnswer = await pkc.getComment({ cid: db.getMention(strangerPost)!.reply_cid! });
+    assert.match(strangerAnswer.content ?? "", /^❌ .*not an owner or admin/);
+    const ownerAnswer = await pkc.getComment({ cid: db.getMention(ownerPost)!.reply_cid! });
+    assert.match(ownerAnswer.content ?? "", /^✅/);
+    assert.equal(ownerAnswer.author.flairs, undefined, "registry does not allow author flairs, so the bot sends none");
+    console.log("registry answers:", strangerAnswer.content, "|", ownerAnswer.content);
+
+    step("mentions in a post title and in a depth-2 reply");
+    const mentionPost = await publish(pkc, { communityAddress: community.address, title: "@bitsocialbot is the moon cheese?", content: "asking for a friend", signer: user, ...answers });
+    const plainReply = await publish(pkc, { communityAddress: community.address, parentCid: mentionPost, postCid: mentionPost, content: "it is not", signer: owner, ...answers });
+    const mentionReply = await publish(pkc, { communityAddress: community.address, parentCid: plainReply, postCid: mentionPost, content: "u/bitsocialbot.eth is this true?", signer: user, ...answers });
+    const quietPost = await publish(pkc, { communityAddress: community.address, title: "no mention here", content: "hi", signer: user, ...answers });
+
+    await until("both mentions answered", () => db.getMention(mentionPost)?.status === "replied" && db.getMention(mentionReply)?.status === "replied");
+    assert.equal(db.getMention(plainReply), undefined);
+    assert.equal(db.getMention(quietPost), undefined);
+    const firstReply = await pkc.getComment({ cid: db.getMention(mentionPost)!.reply_cid! });
+    const secondReply = await pkc.getComment({ cid: db.getMention(mentionReply)!.reply_cid! });
+    for (const reply of [firstReply, secondReply]) {
+        assert.equal(reply.author.name, BOT_NAME);
+        assert.equal(reply.author.displayName, config.botDisplayName);
+        assert.deepEqual(reply.author.flairs, [BOT_FLAIR]);
+    }
+    assert.equal(firstReply.parentCid, mentionPost);
+    assert.equal(secondReply.parentCid, mentionReply);
+    assert.equal(secondReply.depth, 3);
+    const [earlier, later] = firstReply.timestamp <= secondReply.timestamp ? [firstReply, secondReply] : [secondReply, firstReply];
+    assert.equal(later.author.previousCommentCid, earlier.cid, "previousCommentCid chains the bot's comments");
+    console.log("bot replies:", firstReply.content, "|", secondReply.content);
+
+    // Give the bot a few more update cycles: nothing may be answered twice
+    await new Promise((resolve) => setTimeout(resolve, 5000));
+    const usage = db.usageTotals("community", 0);
+    assert.deepEqual(usage.map((row) => [row.key, row.calls]), [[community.address, 2]]);
+    console.log("usage:", JSON.stringify(usage));
+
+    step("key rotation");
+    const rotated = await pkc.createSigner();
+    nameRecords.set(BOT_NAME, rotated.address);
+    const target = { communityAddress: community.address, parentCid: mentionPost, postCid: mentionPost };
+    await assert.rejects(publishReply(pkc, botSigner, { name: BOT_NAME }, target, "old key"), ChallengedError);
+    await publishReply(pkc, rotated, { name: BOT_NAME }, target, "new key");
+    nameRecords.set(BOT_NAME, botSigner.address);
+    console.log("old key challenged, new key exempt");
+
+    step("a challenge added after install is picked up by re-running install");
+    await community.edit({ settings: { ...community.settings!, challenges: [...community.settings!.challenges!, { name: "question", options: { question: "2+2?", answer: "4" } }] } });
+    await until("bot marks needs_reinstall", () => db.getCommunity(community.address)?.status === "needs_reinstall");
+    console.log("status:", db.getCommunity(community.address)?.status_reason);
+    const reinstallOutput = await installScript(url, community.address);
+    assert.match(reinstallOutput, /challenge #0 .*already excludes the bot/);
+    assert.match(reinstallOutput, /challenge #1 .*added exclude/);
+    await until("bot marks installed again", () => db.getCommunity(community.address)?.status === "installed");
+
+    step("uninstall");
+    await installScript(url, community.address, "--uninstall");
+    await until("bot marks uninstalled", () => db.getCommunity(community.address)?.status === "uninstalled");
+
+    await bot.stop();
+    db.close();
+    console.log("\nE2E PASSED");
+} catch (error) {
+    console.error("\nE2E FAILED:", error);
+    exitCode = 1;
+} finally {
+    await Promise.allSettled([botPkc.destroy(), pkc.destroy()]);
+    await stop();
+    process.exit(exitCode);
+}
