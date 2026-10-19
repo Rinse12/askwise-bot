@@ -4,6 +4,7 @@ import { addBotExclude, challengesMissingBotExclude, removeBotExclude, type Chal
 export interface InstallPkc {
     communities: string[];
     createCommunity(options: { address: string }): Promise<InstallCommunity>;
+    getCommunity(options: { address: string }): Promise<{ address?: string; name?: string; publicKey?: string }>;
 }
 
 export interface InstallCommunity {
@@ -28,16 +29,28 @@ export interface InstallReport {
     saved: boolean;
 }
 
+// The node lists each community it hosts under one identifier (e.g. its public key, even after it was given a
+// name), while the owner may type the other one; resolve the community to match either.
+async function findHostedAddress(pkc: InstallPkc, address: string): Promise<string | undefined> {
+    if (pkc.communities.includes(address)) return address;
+    try {
+        const community = await pkc.getCommunity({ address });
+        return [community.publicKey, community.name, community.address].find((candidate) => candidate && pkc.communities.includes(candidate));
+    } catch {
+        return undefined;
+    }
+}
+
 // Exempts (or with uninstall, un-exempts) the bot's name in every challenge of a community hosted by this
 // node. Only challenges that need it are touched, every other setting is written back as it was, and
 // nothing is saved when nothing changes or on a dry run.
 export async function runInstall(pkc: InstallPkc, options: InstallOptions): Promise<InstallReport> {
     const { address, botName, uninstall = false, dryRun = false } = options;
     const where = options.rpcLabel ? ` at ${options.rpcLabel}` : "";
-    if (!pkc.communities.includes(address))
-        throw new Error(`${address} is not hosted by the node${where}. Hosted communities: ${pkc.communities.join(", ") || "none"}`);
+    const hostedAddress = await findHostedAddress(pkc, address);
+    if (!hostedAddress) throw new Error(`${address} is not hosted by the node${where}. Hosted communities: ${pkc.communities.join(", ") || "none"}`);
 
-    const community = await pkc.createCommunity({ address });
+    const community = await pkc.createCommunity({ address: hostedAddress });
     const settings = community.settings;
     if (!settings) throw new Error(`could not read the settings of ${address}; is the node${where} the one that runs it?`);
     const current = (settings.challenges ?? []) as ChallengeWithExclude[];

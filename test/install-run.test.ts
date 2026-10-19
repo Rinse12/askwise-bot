@@ -9,7 +9,12 @@ const ADDRESS = "memes.bso";
 // Settings fields other than challenges, which must be written back untouched
 const OTHER_SETTINGS = { fetchThumbnailUrls: true, fetchThumbnailUrlsProxyUrl: "http://proxy", maxPendingApprovalCount: 50, purgeDisapprovedCommentsOlderThan: 1209600 };
 
-function fakeNode(challenges: ChallengeWithExclude[] | undefined, options: { hosted?: string[]; noSettings?: boolean; failEdit?: boolean } = {}) {
+const PUBLIC_KEY = "12D3KooWJJcSwxH2F3sFL7YCNDLD95kBczEfkHpPNdxcjZwR2X2Y";
+
+function fakeNode(
+    challenges: ChallengeWithExclude[] | undefined,
+    options: { hosted?: string[]; noSettings?: boolean; failEdit?: boolean; unresolvable?: boolean } = {}
+) {
     const node = {
         settings: options.noSettings ? undefined : { ...structuredClone(OTHER_SETTINGS), ...(challenges === undefined ? {} : { challenges: structuredClone(challenges) }) },
         edits: [] as Record<string, unknown>[]
@@ -24,8 +29,21 @@ function fakeNode(challenges: ChallengeWithExclude[] | undefined, options: { hos
             node.settings = structuredClone(settings) as typeof node.settings;
         }
     };
-    const pkc: InstallPkc = { communities: options.hosted ?? [ADDRESS], createCommunity: async () => community };
-    return { pkc, node };
+    const opened: string[] = [];
+    const pkc: InstallPkc = {
+        communities: options.hosted ?? [ADDRESS],
+        createCommunity: async ({ address }) => {
+            opened.push(address);
+            return community;
+        },
+        getCommunity: async ({ address }) => {
+            if (options.unresolvable) throw new Error("ERR_FAILED_TO_RESOLVE");
+            // the community is known both as memes.bso and by its public key
+            if (address !== ADDRESS && address !== PUBLIC_KEY) throw new Error("ERR_NOT_FOUND");
+            return { address: ADDRESS, name: ADDRESS, publicKey: PUBLIC_KEY };
+        }
+    };
+    return { pkc, node, opened };
 }
 
 const install = (pkc: InstallPkc, extra: { uninstall?: boolean; dryRun?: boolean } = {}) => runInstall(pkc, { address: ADDRESS, botName: BOT, ...extra });
@@ -37,6 +55,11 @@ describe("runInstall: refuses what it cannot do", () => {
             "memes.bso is not hosted by the node at ws://localhost:9138. Hosted communities: other.bso, 12D3KooWabc"
         );
         expect(node.edits).toEqual([]);
+    });
+
+    it("a community whose address cannot be resolved", async () => {
+        const { pkc } = fakeNode([{ name: "text-math" }], { hosted: [PUBLIC_KEY], unresolvable: true });
+        await expect(install(pkc)).rejects.toThrow(`memes.bso is not hosted by the node. Hosted communities: ${PUBLIC_KEY}`);
     });
 
     it("a node that hosts nothing", async () => {
@@ -53,6 +76,29 @@ describe("runInstall: refuses what it cannot do", () => {
     it("reports a failed save instead of claiming success", async () => {
         const { pkc } = fakeNode([{ name: "text-math" }], { failEdit: true });
         await expect(install(pkc)).rejects.toThrow("ERR_INVALID_SETTINGS");
+    });
+});
+
+describe("runInstall: finds the hosted community by name or public key", () => {
+    it("given its name while the node lists it by public key (e.g. named after it was created)", async () => {
+        const { pkc, node, opened } = fakeNode([{ name: "text-math" }], { hosted: ["other.bso", PUBLIC_KEY] });
+        const report = await install(pkc);
+        expect(opened).toEqual([PUBLIC_KEY]);
+        expect(report.saved).toBe(true);
+        expect(node.edits).toHaveLength(1);
+    });
+
+    it("given its public key while the node lists it by name", async () => {
+        const { pkc, opened } = fakeNode([{ name: "text-math" }], { hosted: [ADDRESS] });
+        const report = await runInstall(pkc, { address: PUBLIC_KEY, botName: BOT });
+        expect(opened).toEqual([ADDRESS]);
+        expect(report.saved).toBe(true);
+    });
+
+    it("given the identifier the node lists, without resolving anything", async () => {
+        const { pkc, opened } = fakeNode([{ name: "text-math" }], { unresolvable: true });
+        await install(pkc);
+        expect(opened).toEqual([ADDRESS]);
     });
 });
 
