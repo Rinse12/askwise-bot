@@ -1,16 +1,16 @@
 # @bitsocialbot
 
-An AI reply bot for Bitsocial communities, in the spirit of "@grok is this true?". It only works in communities that explicitly installed it. In those, anyone can mention `@bitsocialbot` (or `bitsocialbot.eth` / `u/bitsocialbot.eth`) in a post or a reply, and the bot answers in the thread. It reads the thread and any images posted in it.
+An AI reply bot for Bitsocial communities, in the spirit of "@grok is this true?". It only works in communities that explicitly installed it. In those, anyone can mention `@bitsocialbot` (or `bitsocialbot.bso` / `u/bitsocialbot.bso`) in a post or a reply, and the bot answers in the thread. It reads the thread and any images posted in it.
 
 ## How it fits into pkc-js
 
 - **Installing = exempting the bot's name from the community's challenges.** Every challenge in `settings.challenges` gets this exclude item:
 
   ```json
-  { "names": ["bitsocialbot.eth"], "publicationType": { "reply": true } }
+  { "names": ["bitsocialbot.bso"], "publicationType": { "reply": true } }
   ```
 
-  pkc-js only applies it when a publication's `author.name` is `bitsocialbot.eth` **and** that name currently resolves to the key that signed it. So the exemption follows the wallet that owns the name, not a signing key that could leak. Rotating the key is just re-pointing the name; no community has to do anything.
+  pkc-js only applies it when a publication's `author.name` is exactly `bitsocialbot.bso` **and** that name currently resolves to the key that signed it. So the exemption follows the wallet that owns the name, not a signing key that could leak. Rotating the key is just re-pointing the name; no community has to do anything.
   - The bot only publishes replies, and the exemption covers only replies.
   - Your own users are still challenged exactly as before.
   - This is *not* the `whitelist` challenge, which would lock out everyone not on the list.
@@ -48,7 +48,11 @@ The bot sees the change on the community's next update and stops answering.
 
 ## Self-hosting your own bot
 
-You can run your own instance under your own name; everything below applies to `bitsocialbot.eth` too. Communities install your bot by passing your name to the install script with `BOT_NAME=yourbot.eth npm run install-bot -- --community <address>`.
+You can run your own instance under your own `.bso` name, e.g. `yourbot.bso`. Communities install your bot by passing your name to the install script:
+
+```sh
+BOT_NAME=yourbot.bso npm run install-bot -- --community <address>
+```
 
 ### 1. Requirements
 
@@ -62,7 +66,8 @@ You can run your own instance under your own name; everything below applies to `
 
   Or use the Docker setup from the bitsocial-cli README. If the daemon runs on another machine, use its `ws://host:9138/<auth-key>` URL as `PKC_RPC_URL`.
 - An Anthropic API key (`ANTHROPIC_API_KEY`), or `ant auth login` on the bot machine.
-- A `.eth` name you control, e.g. `yourbot.eth` (a `.bso` name works the same).
+- Your own `.bso` name, e.g. `yourbot.bso`. `.bso` is the protocol's name system and it sits on ENS: to get `yourbot.bso`, register `yourbot.eth` at [app.ens.domains](https://app.ens.domains) with an Ethereum wallet. You set the record on the `.eth` side (step 3), but everywhere in Bitsocial, including `BOT_NAME` and the communities' excludes, you write it as `yourbot.bso`.
+  - pkc-js compares exclude names as exact strings, so always use the same lowercase `.bso` spelling.
 
 ### 2. Install the bot
 
@@ -79,7 +84,11 @@ npm run create-signer
 ```
 
 - This needs no running node. It writes `data/bot-signer.json` (the private key, readable only by you) and prints an address like `12D3KooW...`.
-- From the wallet that owns your name, set the name's Bitsocial record to that address.
+- In the ENS app, from the wallet that owns `yourbot.eth`, add a text record:
+  - key `bitsocial`
+  - value: the `12D3KooW...` address
+
+  That is what makes `yourbot.bso` resolve to the bot's key.
 - Back up `data/bot-signer.json`. If the key ever leaks, run `create-signer` again (after moving the old file away) and re-point the name. Communities don't have to change anything, because they exempt the name, not the key.
 
 ### 4. Create the registry community
@@ -98,7 +107,7 @@ bitsocial community create --title "Bitsocial bot registry" --description "Post 
 | Variable | What it is |
 |---|---|
 | `PKC_RPC_URL` | your daemon, default `ws://localhost:9138` |
-| `BOT_NAME` / `BOT_DISPLAY_NAME` | your name and the display name shown on replies |
+| `BOT_NAME` / `BOT_DISPLAY_NAME` | your name (`yourbot.bso`) and the display name shown on replies |
 | `REGISTRY_ADDRESS` | the registry community from step 4 |
 | `ANTHROPIC_API_KEY` | unless you used `ant auth login` |
 | `LLM_MODEL` | defaults to `claude-haiku-5-5`, the cheapest Claude model. Set e.g. `claude-opus-5-5` for better answers, and update `LLM_INPUT_PRICE_PER_MTOK` / `LLM_OUTPUT_PRICE_PER_MTOK` so cost tracking stays right. |

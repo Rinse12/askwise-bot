@@ -9,7 +9,9 @@ const pkc = await PKC({ dataPath: undefined, httpRoutersOptions: [] });
 try {
     const signer = await createAndStoreSigner(pkc, config.dataDir);
     console.log(`Signer saved. Its address is:\n\n  ${signer.address}\n`);
-    console.log(`From the wallet that owns ${config.botName}, point the name at that address.`);
+    const ensName = config.botName.replace(/\.bso$/, ".eth");
+    console.log(`From the wallet that owns ${ensName} on ENS, set its text record "bitsocial" to that address.`);
+    console.log(`That makes ${config.botName} resolve to the bot's key.`);
 } finally {
     await pkc.destroy();
 }

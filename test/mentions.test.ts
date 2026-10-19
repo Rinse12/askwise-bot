@@ -2,15 +2,15 @@ import { describe, expect, it } from "vitest";
 import { buildThreadContext, createMentionRegex, mentionsBot } from "../src/mentions.js";
 import { parseRegisteredAddress } from "../src/registry.js";
 
-const regex = createMentionRegex("bitsocialbot.eth");
+const regex = createMentionRegex("bitsocialbot.bso");
 const matches = (text: string) => regex.test(text);
 
 describe("createMentionRegex", () => {
-    it.each(["@bitsocialbot is this true?", "hey @BitsocialBot.", "@bitsocialbot.eth explain", "ask u/bitsocialbot.eth", "bitsocialbot.eth, thoughts?", "(@bitsocialbot)", "@bitsocialbot.bso"])(
+    it.each(["@bitsocialbot is this true?", "hey @BitsocialBot.", "@bitsocialbot.bso explain", "ask u/bitsocialbot.bso", "bitsocialbot.bso, thoughts?", "(@bitsocialbot)", "@bitsocialbot.bso"])(
         "matches %s",
         (text) => expect(matches(text)).toBe(true)
     );
-    it.each(["bitsocialbot is cool", "@bitsocialbotfan", "email me@bitsocialbot.eth", "https://x.com/bitsocialbot.eth", "bitsocialbot.eth.com", "@bitsocialbot_2"])(
+    it.each(["bitsocialbot is cool", "@bitsocialbotfan", "email me@bitsocialbot.bso", "https://x.com/bitsocialbot.bso", "bitsocialbot.bso.com", "@bitsocialbot_2"])(
         "does not match %s",
         (text) => expect(matches(text)).toBe(false)
     );

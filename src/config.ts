@@ -41,7 +41,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     if (!(EFFORTS as readonly string[]).includes(effort)) throw new Error(`LLM_EFFORT must be one of ${EFFORTS.join(", ")}`);
     return {
         pkcRpcUrl: env.PKC_RPC_URL || "ws://localhost:9138",
-        botName: (env.BOT_NAME || "bitsocialbot.eth").toLowerCase(),
+        botName: (env.BOT_NAME || "bitsocialbot.bso").toLowerCase(),
         botDisplayName: env.BOT_DISPLAY_NAME || "Bitsocial Bot",
         registryAddress: env.REGISTRY_ADDRESS || undefined,
         dataDir: path.resolve(env.DATA_DIR || "data"),

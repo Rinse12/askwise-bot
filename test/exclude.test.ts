@@ -1,16 +1,19 @@
 import { describe, expect, it } from "vitest";
 import { addBotExclude, botExcludeItem, challengesMissingBotExclude, isBotExcludeItem, removeBotExclude } from "../src/install/exclude.js";
 
-const BOT = "bitsocialbot.eth";
+const BOT = "bitsocialbot.bso";
 
 describe("isBotExcludeItem", () => {
     it("accepts the bot's own item and a plain names item", () => {
         expect(isBotExcludeItem(botExcludeItem(BOT), BOT)).toBe(true);
-        expect(isBotExcludeItem({ names: ["someone.eth", "BitsocialBot.eth"] }, BOT)).toBe(true);
+        expect(isBotExcludeItem({ names: ["someone.bso", BOT] }, BOT)).toBe(true);
     });
     it("rejects items that do not reliably exempt the bot's replies", () => {
         expect(isBotExcludeItem({ publicKeys: ["12D3KooWabc"] }, BOT)).toBe(false);
-        expect(isBotExcludeItem({ names: ["other.eth"] }, BOT)).toBe(false);
+        expect(isBotExcludeItem({ names: ["other.bso"] }, BOT)).toBe(false);
+        // pkc-js matches names as exact strings: another case or the .eth spelling does not exempt the bot
+        expect(isBotExcludeItem({ names: ["BitsocialBot.bso"] }, BOT)).toBe(false);
+        expect(isBotExcludeItem({ names: ["bitsocialbot.eth"] }, BOT)).toBe(false);
         expect(isBotExcludeItem({ names: [BOT], postScore: 10 }, BOT)).toBe(false);
         expect(isBotExcludeItem({ names: [BOT], publicationType: { vote: true } }, BOT)).toBe(false);
     });

@@ -1,5 +1,5 @@
 // Stands in for a bitsocial-cli daemon: an offline Kubo node plus an in-process pkc RPC server whose
-// name resolver is a mutable in-memory map, so the e2e test can point bitsocialbot.eth at any signer.
+// name resolver is a mutable in-memory map, so the e2e test can point bitsocialbot.bso at any signer.
 import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import net, { type AddressInfo } from "node:net";
@@ -14,7 +14,9 @@ const mockResolver = {
     provider: "mock",
     canResolve: () => true,
     resolve: async ({ name }: { name: string }) => {
-        const publicKey = nameRecords.get(name.replace(/\.bso$/, ".eth"));
+        // .bso is the .eth name on ENS, so a record set under either spelling resolves both
+        const ethName = name.replace(/\.bso$/, ".eth");
+        const publicKey = nameRecords.get(ethName) ?? nameRecords.get(ethName.replace(/\.eth$/, ".bso"));
         return publicKey ? { publicKey } : undefined;
     }
 };

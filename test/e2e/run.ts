@@ -24,7 +24,7 @@ import { createPkc, type PkcInstance } from "../../src/pkc.js";
 import { ChallengedError, publishReply } from "../../src/reply.js";
 import { nameRecords, startRpcServer } from "./server.js";
 
-const BOT_NAME = "bitsocialbot.eth";
+const BOT_NAME = "bitsocialbot.bso";
 const BOT_FLAIR = { text: "🤖 bot", backgroundColor: "#5865f2", textColor: "#ffffff" };
 const ROOT = path.dirname(path.dirname(path.dirname(new URL(import.meta.url).pathname)));
 
@@ -132,7 +132,7 @@ try {
     step("mentions in a post title and in a depth-2 reply");
     const mentionPost = await publish(pkc, { communityAddress: community.address, title: "@bitsocialbot is the moon cheese?", content: "asking for a friend", signer: user, ...answers });
     const plainReply = await publish(pkc, { communityAddress: community.address, parentCid: mentionPost, postCid: mentionPost, content: "it is not", signer: owner, ...answers });
-    const mentionReply = await publish(pkc, { communityAddress: community.address, parentCid: plainReply, postCid: mentionPost, content: "u/bitsocialbot.eth is this true?", signer: user, ...answers });
+    const mentionReply = await publish(pkc, { communityAddress: community.address, parentCid: plainReply, postCid: mentionPost, content: "u/bitsocialbot.bso is this true?", signer: user, ...answers });
     const quietPost = await publish(pkc, { communityAddress: community.address, title: "no mention here", content: "hi", signer: user, ...answers });
 
     await until("both mentions answered", () => db.getMention(mentionPost)?.status === "replied" && db.getMention(mentionReply)?.status === "replied");

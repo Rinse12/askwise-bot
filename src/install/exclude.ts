@@ -22,12 +22,14 @@ export const botExcludeItem = (botName: string): ChallengeExclude => ({
     publicationType: { reply: true }
 });
 
+// pkc-js compares exclude names to the publication's author.name as exact strings, so neither case nor the
+// .bso/.eth spelling may differ from the name the bot publishes with.
+//
 // An exclude item exempts the bot's replies only if it names the bot and adds no other condition
 // (other than limiting it to replies). Within one item every field must match, so e.g.
 // `{names: [bot], postScore: 10}` would not reliably exempt the bot.
 export function isBotExcludeItem(item: ChallengeExclude, botName: string): boolean {
-    const target = botName.toLowerCase();
-    if (!Array.isArray(item.names) || !item.names.some((name) => name.toLowerCase() === target)) return false;
+    if (!Array.isArray(item.names) || !item.names.includes(botName)) return false;
     for (const key of Object.keys(item)) {
         if (key === "names") continue;
         if (key === "publicationType") {
@@ -69,18 +71,17 @@ export function addBotExclude<T extends ChallengeWithExclude>(challenges: T[], b
 }
 
 export function removeBotExclude<T extends ChallengeWithExclude>(challenges: T[], botName: string): ExcludeChange<T> {
-    const target = botName.toLowerCase();
     const changed: number[] = [];
     const unchanged: number[] = [];
     const updated = challenges.map((challenge, index) => {
-        if (!challenge.exclude?.some((item) => item.names?.some((name) => name.toLowerCase() === target))) {
+        if (!challenge.exclude?.some((item) => item.names?.includes(botName))) {
             unchanged.push(index);
             return challenge;
         }
         changed.push(index);
         const exclude = challenge.exclude.flatMap((item) => {
-            if (!item.names?.some((name) => name.toLowerCase() === target)) return [item];
-            const names = item.names.filter((name) => name.toLowerCase() !== target);
+            if (!item.names?.includes(botName)) return [item];
+            const names = item.names.filter((name) => name !== botName);
             // An item that only existed for the bot goes away; one shared with other names keeps them
             return names.length > 0 ? [{ ...item, names }] : [];
         });
