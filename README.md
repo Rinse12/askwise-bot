@@ -97,6 +97,7 @@ npm run create-signer
 
   That is what makes `yourbot.bso` resolve to the bot's key.
 - Back up `data/bot-signer.json`. If the key ever leaks, run `create-signer` again (after moving the old file away) and re-point the name. Communities don't have to change anything, because they exempt the name, not the key.
+  - Nodes cache name lookups, so for a while after re-pointing, some communities may still reject the bot's replies as signed by the wrong key. Those mentions are marked failed and not retried.
 
 ### 4. Create the registry community
 
