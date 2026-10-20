@@ -253,3 +253,9 @@ npm test           # unit tests
 npm run typecheck
 npm run e2e        # full flow against a local Kubo + in-process pkc RPC node, with a fake LLM (needs `ipfs` on PATH or KUBO_BIN)
 ```
+
+## License
+
+Copyright (C) 2026 Rinse
+
+[GPL-3.0-or-later](LICENSE): you may redistribute and modify it under the terms of the GNU General Public License, version 3 or any later version.

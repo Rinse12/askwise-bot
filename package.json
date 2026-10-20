@@ -3,6 +3,7 @@
     "version": "0.1.0",
     "private": true,
     "description": "@askwise: an AI reply bot that Bitsocial communities opt into and summon by mention",
+    "license": "GPL-3.0-or-later",
     "type": "module",
     "engines": {
         "node": ">=22"
