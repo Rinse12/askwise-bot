@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { BotDb } from "../src/db.js";
-import { checkLimits } from "../src/limits.js";
+import { checkLimits, limitNoticeDue } from "../src/limits.js";
 import type { Limits } from "../src/config.js";
 
 const limits: Limits = { communityRepliesPerHour: 2, communityTokensPerDay: 1000, authorMentionsPerHour: 1, globalUsdPerDay: 1, maxBotRepliesInThread: 3, mentionMaxAgeHours: 48, mentionMaxAttempts: 5, retryBaseSeconds: 60, rescanIntervalSeconds: 60 };
@@ -42,7 +42,7 @@ describe("checkLimits", () => {
         db.setMention("m1", "a.eth", "u1", "replied");
         db.setMention("m2", "a.eth", "u2", "replied");
         const verdict = checkLimits(db, limits, { community: "a.eth", author: "u3" });
-        expect(verdict).toEqual({ ok: false, reason: "community hourly reply limit of 2 reached" });
+        expect(verdict).toEqual({ ok: false, reason: "community hourly reply limit of 2 reached", scope: "community" });
     });
 
     it("enforces the community token budget and the global spend cap", () => {
@@ -50,7 +50,7 @@ describe("checkLimits", () => {
         expect(checkLimits(db, limits, { community: "a.eth", author: "u" }).ok).toBe(false);
         expect(checkLimits(db, limits, { community: "b.eth", author: "u" }).ok).toBe(true);
         db.recordUsage(usage("c.eth", 10, 0.95));
-        expect(checkLimits(db, limits, { community: "b.eth", author: "u" })).toEqual({ ok: false, reason: "global daily spend cap of $1 reached" });
+        expect(checkLimits(db, limits, { community: "b.eth", author: "u" })).toEqual({ ok: false, reason: "global daily spend cap of $1 reached", scope: "community" });
     });
 
     it("reports usage totals per group", () => {
@@ -62,5 +62,26 @@ describe("checkLimits", () => {
             ["b.eth", 1, 10],
             ["a.eth", 2, 150]
         ]);
+    });
+});
+
+describe("limitNoticeDue", () => {
+    let db: BotDb;
+    beforeEach(() => (db = new BotDb(":memory:")));
+    afterEach(() => db.close());
+    const author = { ok: false as const, reason: "author", scope: "author" as const };
+    const community = { ok: false as const, reason: "community", scope: "community" as const };
+
+    it("allows one notice an hour per author for their own limit", () => {
+        expect(limitNoticeDue(db, author, { community: "a.eth", author: "alice.eth" }, 1000)).toBe(true);
+        expect(limitNoticeDue(db, author, { community: "a.eth", author: "alice.eth" }, 2000)).toBe(false);
+        expect(limitNoticeDue(db, author, { community: "a.eth", author: "bob.eth" }, 2000)).toBe(true);
+        expect(limitNoticeDue(db, author, { community: "a.eth", author: "alice.eth" }, 1000 + 3600)).toBe(true);
+    });
+
+    it("allows one notice an hour per community for shared limits, whoever mentions", () => {
+        expect(limitNoticeDue(db, community, { community: "a.eth", author: "alice.eth" }, 1000)).toBe(true);
+        expect(limitNoticeDue(db, community, { community: "a.eth", author: "bob.eth" }, 1500)).toBe(false);
+        expect(limitNoticeDue(db, community, { community: "b.eth", author: "bob.eth" }, 1500)).toBe(true);
     });
 });

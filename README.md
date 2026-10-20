@@ -18,7 +18,7 @@ In any community that has installed it, mention the bot in a post or a reply, an
 - **Limits:**
   - It answers each comment once.
   - It doesn't keep a back-and-forth going forever in one thread.
-  - Communities have per-hour limits.
+  - Communities have per-hour limits. When one is reached the bot says so and answers later.
   - If the bot was offline, it answers when it comes back. Mentions older than two days are skipped.
 
 The bot can be wrong. Treat its answers like any other reply.
@@ -231,6 +231,8 @@ All LLM calls are recorded in `data/bot.db` (`llm_usage`: tokens, model, cost pe
 - mentions per author per hour
 - a global daily spend cap
 - a cap on bot replies per thread, to avoid loops
+
+They are set in `.env` (`LIMIT_*`, see `.env.example`). A mention over a limit is answered once the limit resets. The first time, the bot replies that it has reached its limit, at most once an hour per author (their own limit) or per community (shared limits).
 
 ```sh
 npm run usage -- --since 7d --by community   # or --by author / --by model, --since 24h / 4w / all

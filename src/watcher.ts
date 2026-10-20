@@ -2,7 +2,7 @@ import { buildBotAuthor, pickBotFlair, PREVIOUS_COMMENT_CID_KEY, type BotAuthor 
 import type { Config } from "./config.js";
 import type { BotDb } from "./db.js";
 import { undecidedChallenges, diagnoseInstall, type ChallengeWithExclude } from "./install/exclude.js";
-import { checkLimits } from "./limits.js";
+import { checkLimits, LIMIT_NOTICE, limitNoticeDue } from "./limits.js";
 import { isTooOld, nextAttemptAt } from "./retry.js";
 import { findPrivateInfo, PrivateInfoBlockedError } from "./llm/private-info.js";
 import { LlmRefusalError, type LlmClient, type LlmReply } from "./llm/types.js";
@@ -211,6 +211,13 @@ export class CommunityWatcher extends CommunitySubscription {
             const retryAt = nextAttemptAt({ kind: "rate_limited" }, mention.timestamp, config.limits, nowTs);
             if (!retry) console.log(`[${this.address}] not answering ${mention.cid} yet: ${verdict.reason}`);
             record("rate_limited", { reason: verdict.reason, retryAt });
+            if (!retry && limitNoticeDue(db, verdict, { community: this.address, author }, nowTs)) {
+                const target = { communityAddress: this.address, parentCid: mention.cid, postCid: mention.postCid ?? mention.cid };
+                // The answer still comes when the limit resets; a notice that fails to publish is not retried
+                await publishAsBot(this.ctx, this.community!, target, LIMIT_NOTICE).catch((error) =>
+                    console.warn(`[${this.address}] could not post the limit notice on ${mention.cid}: ${error instanceof Error ? error.message : error}`)
+                );
+            }
             return;
         }
         record("replying");
