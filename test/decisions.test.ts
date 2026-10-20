@@ -104,6 +104,7 @@ describe("runInstall asking the owner", () => {
         expect(asked).toEqual([0, 1]);
         expect(report.lines).toContain("  challenge #1 (ai-moderation): now checks the bot's replies");
         expect(report.lines.some((line) => line.includes("still go through: #1 (ai-moderation)"))).toBe(true);
+        expect(report.lines.some((line) => line.startsWith("Privacy: when someone mentions"))).toBe(true);
 
         node.settings.challenges.push({ name: "later" });
         asked.length = 0;

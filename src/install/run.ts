@@ -100,6 +100,13 @@ export async function runInstall(pkc: InstallPkc, options: InstallOptions): Prom
                 "the bot cannot answer it and will not reply here; run the install script again with --ask-all to exempt it."
         );
 
+    if (!uninstall && !dryRun)
+        lines.push(
+            "",
+            `Privacy: when someone mentions ${botName} in your community, the thread it reads (posts, replies, their authors' ` +
+                "names and addresses, images) is sent to the AI provider the bot's operator uses. Let your users know."
+        );
+
     if (!uninstall && !dryRun && undecidedChallenges(change.challenges, botName).length === 0)
         lines.push(
             "",

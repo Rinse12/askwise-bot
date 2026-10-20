@@ -23,6 +23,8 @@ In any community that has installed it, mention the bot in a post or a reply, an
 
 The bot can be wrong. Treat its answers like any other reply.
 
+**Privacy:** when you mention the bot, the thread it reads (the post, the replies above yours, their authors' names and addresses, and the images in them) is sent to the AI provider the bot's operator uses, which for this code is Anthropic. Nothing is sent for threads that don't mention it. Don't mention the bot in a thread you wouldn't want an AI provider to read.
+
 ## How it fits into pkc-js
 
 - **Installing = deciding, for each of the community's challenges, whether the bot is exempt from it.** An exempted challenge in `settings.challenges` gets this exclude item:
@@ -192,6 +194,8 @@ npm start
 Every bot publication carries `author.name`, `displayName`, `previousCommentCid` (chained across all of its comments) and, where the community offers one, a bot flair.
 
 ### Claude Code backend
+
+> **Local testing only.** Anthropic's terms don't allow serving other people's requests through a Free, Pro or Max plan ([legal and compliance](https://code.claude.com/docs/en/legal-and-compliance.md)). A bot that answers anyone in a community does exactly that, so a public bot must use `LLM_PROVIDER=anthropic-api`. This backend will be removed once the API backend is in use.
 
 With `LLM_PROVIDER=claude-code`, each mention runs `claude -p` headless as a fresh session:
 - no tools, so thread content cannot make it run anything;
