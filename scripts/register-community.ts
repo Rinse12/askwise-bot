@@ -4,9 +4,8 @@
 //
 //   npm run register-community -- --community <address>
 import fs from "node:fs";
-import path from "node:path";
 import { parseArgs } from "node:util";
-import { loadConfig } from "../src/config.js";
+import { dbPath, loadConfig } from "../src/config.js";
 import { BotDb } from "../src/db.js";
 import { diagnoseInstall, type ChallengeWithExclude } from "../src/install/exclude.js";
 import { connectPkc } from "../src/pkc.js";
@@ -22,7 +21,7 @@ async function main() {
         const { installed, problems } = diagnoseInstall(community.challenges as ChallengeWithExclude[], config.botName);
         if (!installed) throw new Error(`${values.community} does not exempt ${config.botName} yet:\n- ${problems.join("\n- ")}\nRun install-bot first.`);
         fs.mkdirSync(config.dataDir, { recursive: true });
-        const db = new BotDb(path.join(config.dataDir, "bitsocialbot.db"));
+        const db = new BotDb(dbPath(config.dataDir));
         db.installCommunity(community.address, "operator", null);
         db.close();
         console.log(`Registered ${community.address}. Restart the bot to start answering there.`);

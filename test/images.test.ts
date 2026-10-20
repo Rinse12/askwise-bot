@@ -22,13 +22,13 @@ describe("threadImages", () => {
     it("puts the calling comment's images first and labels where each came from", () => {
         const post = { cid: "p", depth: 0, timestamp: 1, link: "https://i.example/post.png" };
         const reply = { cid: "r", depth: 1, timestamp: 1, content: "https://i.example/reply.gif https://i.example/post.png" };
-        const mention = { cid: "m", depth: 2, timestamp: 1, content: "@bitsocialbot what is ![x](https://i.example/m.jpg)" };
+        const mention = { cid: "m", depth: 2, timestamp: 1, content: "@askwise what is ![x](https://i.example/m.jpg)" };
         expect(threadImages(mention, [post, reply])).toEqual([
             { url: "https://i.example/m.jpg", label: "in the comment calling you" },
             { url: "https://i.example/reply.gif", label: "in the reply at depth 1" },
             { url: "https://i.example/post.png", label: "in the reply at depth 1" }
         ]);
-        expect(threadImages({ ...post, title: "@bitsocialbot ?" }, [])).toEqual([{ url: "https://i.example/post.png", label: "in the post calling you" }]);
+        expect(threadImages({ ...post, title: "@askwise ?" }, [])).toEqual([{ url: "https://i.example/post.png", label: "in the post calling you" }]);
     });
 });
 

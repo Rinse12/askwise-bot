@@ -144,7 +144,7 @@ describe("runInstall: what gets saved", () => {
         const { pkc, node } = fakeNode([]);
         const report = await install(pkc);
         expect(node.edits).toEqual([]);
-        expect(report.lines[0]).toBe("memes.bso has no challenges, so bitsocialbot.bso can already publish. Nothing to change.");
+        expect(report.lines[0]).toBe("memes.bso has no challenges, so askwise.bso can already publish. Nothing to change.");
     });
 
     it("settings without a challenges key: nothing to do, and no challenges key is invented", async () => {
@@ -201,17 +201,17 @@ describe("runInstall: uninstall", () => {
     it("says the bot will stop answering only when something was removed", async () => {
         const { pkc } = fakeNode(addBotExclude(PRODUCTION_LIKE, BOT).challenges);
         const report = await install(pkc, { uninstall: true });
-        expect(report.lines.at(-1)).toBe("bitsocialbot.bso will stop answering in memes.bso on its next update.");
+        expect(report.lines.at(-1)).toBe("askwise.bso will stop answering in memes.bso on its next update.");
     });
 });
 
 describe("runInstall: output", () => {
     it("names each challenge by name or path and points to the registry", async () => {
         const { pkc } = fakeNode(PRODUCTION_LIKE);
-        const report = await runInstall(pkc, { address: ADDRESS, botName: BOT, registryAddress: "registry.bitsocialbot.bso" });
-        expect(report.lines).toContain("  challenge #0 (publication-match): added exclude for bitsocialbot.bso");
-        expect(report.lines).toContain("  challenge #2 (@bitsocial/spam-blocker-challenge): added exclude for bitsocialbot.bso");
-        expect(report.lines.at(-1)).toMatch(/registry community \(registry\.bitsocialbot\.bso\) from the owner or an admin account, containing just: memes\.bso$/);
+        const report = await runInstall(pkc, { address: ADDRESS, botName: BOT, registryAddress: "registry.askwise.bso" });
+        expect(report.lines).toContain("  challenge #0 (publication-match): added exclude for askwise.bso");
+        expect(report.lines).toContain("  challenge #2 (@bitsocial/spam-blocker-challenge): added exclude for askwise.bso");
+        expect(report.lines.at(-1)).toMatch(/registry community \(registry\.askwise\.bso\) from the owner or an admin account, containing just: memes\.bso$/);
     });
 
     it("uses the bot name it is given, exactly as given", async () => {

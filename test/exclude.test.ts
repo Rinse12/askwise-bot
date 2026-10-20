@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { addBotExclude, botExcludeItem, challengesMissingBotExclude, diagnoseInstall, isBotExcludeItem, removeBotExclude } from "../src/install/exclude.js";
 
-const BOT = "bitsocialbot.bso";
+const BOT = "askwise.bso";
 
 describe("isBotExcludeItem", () => {
     it("accepts the bot's own item and a plain names item", () => {
@@ -12,8 +12,8 @@ describe("isBotExcludeItem", () => {
         expect(isBotExcludeItem({ publicKeys: ["12D3KooWabc"] }, BOT)).toBe(false);
         expect(isBotExcludeItem({ names: ["other.bso"] }, BOT)).toBe(false);
         // pkc-js matches names as exact strings: another case or the .eth spelling does not exempt the bot
-        expect(isBotExcludeItem({ names: ["BitsocialBot.bso"] }, BOT)).toBe(false);
-        expect(isBotExcludeItem({ names: ["bitsocialbot.eth"] }, BOT)).toBe(false);
+        expect(isBotExcludeItem({ names: ["AskWise.bso"] }, BOT)).toBe(false);
+        expect(isBotExcludeItem({ names: ["askwise.eth"] }, BOT)).toBe(false);
         expect(isBotExcludeItem({ names: [BOT], postScore: 10 }, BOT)).toBe(false);
         expect(isBotExcludeItem({ names: [BOT], publicationType: { vote: true } }, BOT)).toBe(false);
     });
@@ -72,19 +72,19 @@ describe("diagnoseInstall", () => {
         const challenges = [
             { type: "text/plain", exclude: [botExcludeItem(BOT)] },
             { type: "text/plain" },
-            { type: "url/iframe", exclude: [{ names: ["bitsocialbot.eth"] }] },
-            { exclude: [{ names: ["BitsocialBot.bso"] }] },
+            { type: "url/iframe", exclude: [{ names: ["askwise.eth"] }] },
+            { exclude: [{ names: ["AskWise.bso"] }] },
             { exclude: [{ names: [BOT], postScore: 3 }] },
             { exclude: [{ names: [BOT], publicationType: { post: true } }] }
         ];
         const { installed, problems } = diagnoseInstall(challenges, BOT);
         expect(installed).toBe(false);
         expect(problems).toEqual([
-            "challenge #1 (text/plain): it has no exclude for bitsocialbot.bso",
-            'challenge #2 (url/iframe): its exclude names "bitsocialbot.eth", but it must be exactly "bitsocialbot.bso" (pkc-js compares names exactly)',
-            'challenge #3: its exclude names "BitsocialBot.bso", but it must be exactly "bitsocialbot.bso" (pkc-js compares names exactly)',
-            "challenge #4: its exclude for bitsocialbot.bso also requires postScore, so it does not always apply",
-            "challenge #5: its exclude for bitsocialbot.bso does not cover replies (publicationType.reply)"
+            "challenge #1 (text/plain): it has no exclude for askwise.bso",
+            'challenge #2 (url/iframe): its exclude names "askwise.eth", but it must be exactly "askwise.bso" (pkc-js compares names exactly)',
+            'challenge #3: its exclude names "AskWise.bso", but it must be exactly "askwise.bso" (pkc-js compares names exactly)',
+            "challenge #4: its exclude for askwise.bso also requires postScore, so it does not always apply",
+            "challenge #5: its exclude for askwise.bso does not cover replies (publicationType.reply)"
         ]);
     });
 

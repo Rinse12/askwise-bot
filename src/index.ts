@@ -1,12 +1,12 @@
 import fs from "node:fs";
-import path from "node:path";
 import { loadAuthorProfile } from "./author.js";
 import { startBot } from "./bot.js";
-import { loadConfig } from "./config.js";
+import { dbPath, loadConfig } from "./config.js";
 import { BotDb } from "./db.js";
 import { ImageLoader } from "./images.js";
 import { AnthropicLlmClient } from "./llm/anthropic.js";
 import { ClaudeCodeLlmClient } from "./llm/claude-code.js";
+import { systemPrompt } from "./llm/content.js";
 import { claudeCodeAccountSecrets } from "./llm/private-info.js";
 import { createMentionRegex } from "./mentions.js";
 import { assertNameResolvesToSigner, connectPkc, loadSigner } from "./pkc.js";
@@ -14,7 +14,7 @@ import { assertNameResolvesToSigner, connectPkc, loadSigner } from "./pkc.js";
 async function main() {
     const config = loadConfig();
     fs.mkdirSync(config.dataDir, { recursive: true });
-    const db = new BotDb(path.join(config.dataDir, "bitsocialbot.db"));
+    const db = new BotDb(dbPath(config.dataDir));
     const { pkc, url, close } = await connectPkc(config);
     console.log(`pkc RPC: ${url}`);
     const signer = await loadSigner(pkc, config.dataDir);
@@ -23,8 +23,8 @@ async function main() {
     const images = new ImageLoader(config.imageProxyUrl);
     const llm =
         config.llm.provider === "claude-code"
-            ? new ClaudeCodeLlmClient(config.llm, images, config.llm.claudeCodeBin)
-            : new AnthropicLlmClient(config.llm, images);
+            ? new ClaudeCodeLlmClient(config.llm, images, systemPrompt(config), config.llm.claudeCodeBin)
+            : new AnthropicLlmClient(config.llm, images, systemPrompt(config));
 
     // Claude Code puts the logged-in account's email and org id into every session; no reply may repeat them.
     // Without them the check would be blind, so the bot refuses to start.

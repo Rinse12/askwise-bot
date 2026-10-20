@@ -1,8 +1,8 @@
 {
-    "name": "bitsocialbot",
+    "name": "askwise",
     "version": "0.1.0",
     "private": true,
-    "description": "@bitsocialbot: an AI reply bot that Bitsocial communities opt into and summon by mention",
+    "description": "@askwise: an AI reply bot that Bitsocial communities opt into and summon by mention",
     "type": "module",
     "engines": {
         "node": ">=22"

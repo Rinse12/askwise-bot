@@ -1,7 +1,7 @@
 // Shapes settings.challenges can take, shared by the install tests (test/install-*.test.ts).
 import { botExcludeItem, type ChallengeWithExclude } from "../../src/install/exclude.js";
 
-export const BOT = "bitsocialbot.bso";
+export const BOT = "askwise.bso";
 export const BOT_ITEM = botExcludeItem(BOT);
 
 export interface Scenario {
@@ -110,13 +110,13 @@ export const SCENARIOS: Scenario[] = [
     },
     {
         name: "the bot misspelled as .eth",
-        challenges: [{ name: "text-math", exclude: [{ names: ["bitsocialbot.eth"] }] }],
+        challenges: [{ name: "text-math", exclude: [{ names: ["askwise.eth"] }] }],
         changes: [0],
         roundTrips: true
     },
     {
         name: "the bot with different letter case",
-        challenges: [{ name: "text-math", exclude: [{ names: ["BitsocialBot.bso"] }] }],
+        challenges: [{ name: "text-math", exclude: [{ names: ["AskWise.bso"] }] }],
         changes: [0],
         roundTrips: true
     },

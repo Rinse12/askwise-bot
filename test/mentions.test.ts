@@ -2,15 +2,15 @@ import { describe, expect, it } from "vitest";
 import { buildThreadContext, createMentionRegex, mentionsBot } from "../src/mentions.js";
 import { formatFailure, parseRegisteredAddress } from "../src/registry.js";
 
-const regex = createMentionRegex("bitsocialbot.bso");
+const regex = createMentionRegex("askwise.bso");
 const matches = (text: string) => regex.test(text);
 
 describe("createMentionRegex", () => {
-    it.each(["@bitsocialbot is this true?", "hey @BitsocialBot.", "@bitsocialbot.bso explain", "ask u/bitsocialbot.bso", "bitsocialbot.bso, thoughts?", "(@bitsocialbot)", "@bitsocialbot.bso"])(
+    it.each(["@askwise is this true?", "hey @AskWise.", "@askwise.bso explain", "ask u/askwise.bso", "askwise.bso, thoughts?", "(@askwise)", "@askwise.bso"])(
         "matches %s",
         (text) => expect(matches(text)).toBe(true)
     );
-    it.each(["bitsocialbot is cool", "@bitsocialbotfan", "email me@bitsocialbot.bso", "https://x.com/bitsocialbot.bso", "bitsocialbot.bso.com", "@bitsocialbot_2"])(
+    it.each(["askwise is cool", "@askwisefan", "email me@askwise.bso", "https://x.com/askwise.bso", "askwise.bso.com", "@askwise_2"])(
         "does not match %s",
         (text) => expect(matches(text)).toBe(false)
     );
@@ -18,24 +18,24 @@ describe("createMentionRegex", () => {
 
 describe("mentionsBot", () => {
     it("checks a post's title and content", () => {
-        expect(mentionsBot({ cid: "a", title: "@bitsocialbot explain X", content: "details" }, regex)).toBe(true);
-        expect(mentionsBot({ cid: "a", title: "a question", content: "@bitsocialbot ?" }, regex)).toBe(true);
+        expect(mentionsBot({ cid: "a", title: "@askwise explain X", content: "details" }, regex)).toBe(true);
+        expect(mentionsBot({ cid: "a", title: "a question", content: "@askwise ?" }, regex)).toBe(true);
     });
     it("checks a nested reply's content", () => {
-        expect(mentionsBot({ cid: "r", depth: 3, content: "@bitsocialbot is this true" }, regex)).toBe(true);
+        expect(mentionsBot({ cid: "r", depth: 3, content: "@askwise is this true" }, regex)).toBe(true);
         expect(mentionsBot({ cid: "r", depth: 3, content: "no mention" }, regex)).toBe(false);
     });
 });
 
 describe("buildThreadContext", () => {
     it("renders the thread from the post down to the calling comment", () => {
-        const context = buildThreadContext({ cid: "m", depth: 2, content: "@bitsocialbot is this true?", author: { address: "carol.eth" } }, [
+        const context = buildThreadContext({ cid: "m", depth: 2, content: "@askwise is this true?", author: { address: "carol.eth" } }, [
             { cid: "p", depth: 0, title: "Claim", content: "The moon is cheese", author: { address: "alice.eth", displayName: "Alice" } },
             { cid: "r", depth: 1, content: "source?", author: { address: "bob.eth" } }
         ]);
         expect(context).toContain("[post] Alice (alice.eth):\nTitle: Claim\nThe moon is cheese");
         expect(context).toContain("[reply depth 1] bob.eth:\nsource?");
-        expect(context.endsWith("[comment calling you] carol.eth:\n@bitsocialbot is this true?")).toBe(true);
+        expect(context.endsWith("[comment calling you] carol.eth:\n@askwise is this true?")).toBe(true);
     });
 });
 
@@ -51,8 +51,8 @@ describe("parseRegisteredAddress", () => {
 
 describe("formatFailure", () => {
     it("lists the problems and the fix", () => {
-        expect(formatFailure("bitsocialbot.bso", { ok: false, address: "memes.bso", problems: ["a", "b"], fix: "do x." })).toBe(
-            "❌ bitsocialbot.bso is not installed in memes.bso:\n\n- a\n- b\n\nTo fix it: do x."
+        expect(formatFailure("askwise.bso", { ok: false, address: "memes.bso", problems: ["a", "b"], fix: "do x." })).toBe(
+            "❌ askwise.bso is not installed in memes.bso:\n\n- a\n- b\n\nTo fix it: do x."
         );
     });
 });

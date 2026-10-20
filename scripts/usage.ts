@@ -1,9 +1,8 @@
-// Token and cost report from data/bitsocialbot.db.
+// Token and cost report from data/bot.db.
 //
 //   npm run usage -- [--since 7d] [--by community|author|model]
-import path from "node:path";
 import { parseArgs } from "node:util";
-import { loadConfig } from "../src/config.js";
+import { dbPath, loadConfig } from "../src/config.js";
 import { BotDb, type UsageGroup } from "../src/db.js";
 
 const { values } = parseArgs({
@@ -25,7 +24,7 @@ function parseSince(since: string): number {
 const group = values.by as UsageGroup;
 if (!["community", "author", "model"].includes(group)) throw new Error("--by must be community, author or model");
 
-const db = new BotDb(path.join(loadConfig().dataDir, "bitsocialbot.db"));
+const db = new BotDb(dbPath(loadConfig().dataDir));
 const rows = db.usageTotals(group, parseSince(values.since!));
 db.close();
 

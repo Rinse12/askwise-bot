@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { contentWithoutFailedImages, type ContentBlock } from "../src/llm/content.js";
+import { contentWithoutFailedImages, systemPrompt, type ContentBlock } from "../src/llm/content.js";
 
 const label = (n: number): ContentBlock => ({ type: "text", text: `Image ${n}` });
 const image = (n: number): ContentBlock => ({ type: "image", source: { type: "url", url: `https://i.example/${n}.png` } });
@@ -21,5 +21,13 @@ describe("contentWithoutFailedImages", () => {
     it("with a single image goes straight to dropping it", () => {
         const attempts = contentWithoutFailedImages([label(1), image(1), thread]);
         expect(attempts).toEqual([[{ type: "text", text: "Image 1 (could not be loaded)" }, thread]]);
+    });
+});
+
+describe("systemPrompt", () => {
+    it("introduces the bot by its configured name and handle", () => {
+        const prompt = systemPrompt({ botName: "helper.bso", botDisplayName: "Helper" });
+        expect(prompt).toMatch(/^You are Helper \(@helper\),/);
+        expect(prompt).not.toMatch(/askwise/i);
     });
 });

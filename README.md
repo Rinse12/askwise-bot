@@ -1,16 +1,16 @@
-# @bitsocialbot
+# @askwise
 
-An AI reply bot for Bitsocial communities, in the spirit of "@grok is this true?". It only works in communities that explicitly installed it. In those, anyone can mention `@bitsocialbot` (or `bitsocialbot.bso` / `u/bitsocialbot.bso`) in a post or a reply, and the bot answers in the thread. It reads the thread and any images posted in it.
+An AI reply bot for Bitsocial communities, in the spirit of "@grok is this true?". It only works in communities that explicitly installed it. In those, anyone can mention `@askwise` (or `askwise.bso` / `u/askwise.bso`) in a post or a reply, and the bot answers in the thread. It reads the thread and any images posted in it.
 
 ## Using the bot
 
 In any community that has installed it, mention the bot in a post or a reply, and it answers in the thread a few moments later.
 
-- **How to call it:** write `@bitsocialbot` anywhere in your post's title or text, or in a reply. `bitsocialbot.bso` and `u/bitsocialbot.bso` work too.
+- **How to call it:** write `@askwise` anywhere in your post's title or text, or in a reply. `askwise.bso` and `u/askwise.bso` work too.
 - **Examples:**
-  - a reply under a post: `@bitsocialbot is this true?`
-  - a post titled `@bitsocialbot explain how ENS names work`
-  - a reply under an image post: `@bitsocialbot what's in this picture?`
+  - a reply under a post: `@askwise is this true?`
+  - a post titled `@askwise explain how ENS names work`
+  - a reply under an image post: `@askwise what's in this picture?`
 - **What it reads:** your comment, the post and the replies above yours, and any images in them. So "is this true?" refers to what you're replying to.
 - **Where it works:** only in communities whose owners installed it. Elsewhere, mentions are ignored.
 - **Limits:**
@@ -26,10 +26,10 @@ The bot can be wrong. Treat its answers like any other reply.
 - **Installing = exempting the bot's name from the community's challenges.** Every challenge in `settings.challenges` gets this exclude item:
 
   ```json
-  { "names": ["bitsocialbot.bso"], "publicationType": { "reply": true } }
+  { "names": ["askwise.bso"], "publicationType": { "reply": true } }
   ```
 
-  pkc-js only applies it when a publication's `author.name` is exactly `bitsocialbot.bso` **and** that name currently resolves to the key that signed it. So the exemption follows the wallet that owns the name, not a signing key that could leak. Rotating the key is just re-pointing the name; no community has to do anything.
+  pkc-js only applies it when a publication's `author.name` is exactly `askwise.bso` **and** that name currently resolves to the key that signed it. So the exemption follows the wallet that owns the name, not a signing key that could leak. Rotating the key is just re-pointing the name; no community has to do anything.
   - The bot only publishes replies, and the exemption covers only replies.
   - Your own users are still challenged exactly as before.
   - This is *not* the `whitelist` challenge, which would lock out everyone not on the list.
@@ -39,12 +39,12 @@ The bot can be wrong. Treat its answers like any other reply.
   - Otherwise it replies ❌ with what is wrong and how to fix it: no address in the post, community unreachable, poster without the role, or which challenge lacks the exemption (including a `.eth` or differently-cased spelling of the name).
 - **Mentions** are found by walking whatever page sorts the community publishes. No particular sort (`new`, `hot`, …) is assumed. Pages are content-addressed, so already-walked pages are never fetched twice.
 
-## Install @bitsocialbot in your community
+## Install @askwise in your community
 
 Requirements: the community runs on a [bitsocial-cli](https://github.com/bitsocialnet/bitsocial-cli) daemon **on this machine** (pkc RPC at `ws://localhost:9138`), and Node.js 22+.
 
 ```sh
-git clone https://github.com/bitsocialnet/Bitsocial-bot.git && cd Bitsocial-bot
+git clone https://github.com/rinse12/askwise-bot.git && cd askwise-bot
 npm ci
 
 # preview the change, then apply it
@@ -55,7 +55,7 @@ npm run install-bot -- --community <your-community-address>
 - The script only edits challenges that don't exempt the bot yet. **Run it again whenever you add challenges.**
 - If your daemon is elsewhere, set `PKC_RPC_SSH_HOST=<ssh host>` (tunnel) or `PKC_RPC_URL=ws://host:9138/<auth-key>` in `.env`, or pass `--rpc`.
 
-Then, from the owner or an admin account, make a post in the registry community **`registry.bitsocialbot.bso`** whose content is just your community address. The bot replies ✅ when it is active, or ❌ with what to fix.
+Then, from the owner or an admin account, make a post in the registry community **`registry.askwise.bso`** whose content is just your community address. The bot replies ✅ when it is active, or ❌ with what to fix.
 
 **Optional bot badge.** A community only accepts author flairs it lists itself. To have the bot's replies show a bot flair, enable `features.authorFlairs` and add an author flair whose text contains "bot" (e.g. `🤖 bot`) to `flairs.author`. The bot uses it automatically.
 
@@ -98,7 +98,7 @@ BOT_NAME=yourbot.bso npm run install-bot -- --community <address>
 ### 2. Install the bot
 
 ```sh
-git clone https://github.com/bitsocialnet/Bitsocial-bot.git && cd Bitsocial-bot
+git clone https://github.com/rinse12/askwise-bot.git && cd askwise-bot
 npm ci
 cp .env.example .env
 ```
@@ -123,7 +123,7 @@ npm run create-signer
 On your daemon:
 
 ```sh
-bitsocial community create --title "Bitsocial bot registry" --description "Post your community address here to activate the bot"
+bitsocial community create --title "AskWise registry" --description "Post your community address here to activate the bot"
 ```
 
 - Give it no challenges, or run `npm run install-bot -- --community <registry-address>` so the bot can reply there.
@@ -159,13 +159,13 @@ npm start
 - To keep it running, use a systemd user service:
 
   ```ini
-  # ~/.config/systemd/user/bitsocialbot.service
+  # ~/.config/systemd/user/social-bot.service
   [Unit]
-  Description=Bitsocial bot
+  Description=AskWise bot
   After=network-online.target
 
   [Service]
-  WorkingDirectory=%h/Bitsocial-bot
+  WorkingDirectory=%h/askwise-bot
   ExecStart=/usr/bin/env npm start
   Restart=always
   RestartSec=10
@@ -175,12 +175,12 @@ npm start
   ```
 
   ```sh
-  systemctl --user enable --now bitsocialbot
+  systemctl --user enable --now social-bot
   loginctl enable-linger "$USER"   # keep it running after you log out
-  journalctl --user -u bitsocialbot -f
+  journalctl --user -u social-bot -f
   ```
 
-- All state is in `data/`: the key, `bitsocialbot.db` (installed communities, handled mentions, token usage) and the optional profile. Back up that folder to move the bot to another machine.
+- All state is in `data/`: the key, `bot.db` (installed communities, handled mentions, token usage) and the optional profile. Back up that folder to move the bot to another machine.
 
 Every bot publication carries `author.name`, `displayName`, `previousCommentCid` (chained across all of its comments) and, where the community offers one, a bot flair.
 
@@ -213,7 +213,7 @@ If Anthropic can't fetch an image, the bot retries without that image (then with
 
 ### Limits and token tracking
 
-All LLM calls are recorded in `data/bitsocialbot.db` (`llm_usage`: tokens, model, cost per mention). Before calling the LLM, the bot enforces:
+All LLM calls are recorded in `data/bot.db` (`llm_usage`: tokens, model, cost per mention). Before calling the LLM, the bot enforces:
 
 - replies per community per hour
 - tokens per community per day
@@ -233,7 +233,7 @@ The bot can be offline: on a laptop that sleeps, during a restart, or while the 
 - **Rate-limited mentions** wait until the limits allow them.
 - **Interrupted replies:** a reply interrupted by a crash or shutdown is retried on the next start.
 
-**After a suspend or network drop, restart the bot** (`npm start`, or `systemctl --user restart bitsocialbot`). The pkc RPC client reconnects, but until [pkc-js#425](https://github.com/pkcprotocol/pkc-js/issues/425) is fixed its community subscriptions stay silent afterwards. Nothing is lost: the restart picks up the backlog.
+**After a suspend or network drop, restart the bot** (`npm start`, or `systemctl --user restart social-bot`). The pkc RPC client reconnects, but until [pkc-js#425](https://github.com/pkcprotocol/pkc-js/issues/425) is fixed its community subscriptions stay silent afterwards. Nothing is lost: the restart picks up the backlog.
 
 ## Development
 

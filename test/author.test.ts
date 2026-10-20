@@ -3,7 +3,7 @@ import { buildBotAuthor, pickBotFlair, PREVIOUS_COMMENT_CID_KEY } from "../src/a
 import { BotDb } from "../src/db.js";
 
 const botFlair = { text: "Bot", backgroundColor: "#000" };
-const config = { botName: "bitsocialbot.bso", botDisplayName: "Bitsocial Bot" };
+const config = { botName: "askwise.bso", botDisplayName: "AskWise" };
 
 describe("pickBotFlair", () => {
     it("uses the community's own bot author flair when author flairs are enabled", () => {
@@ -22,10 +22,10 @@ describe("buildBotAuthor", () => {
     afterEach(() => db.close());
 
     it("always uses the configured name and chains previousCommentCid", () => {
-        expect(buildBotAuthor(config, db, {}, undefined)).toEqual({ name: "bitsocialbot.bso", displayName: "Bitsocial Bot" });
+        expect(buildBotAuthor(config, db, {}, undefined)).toEqual({ name: "askwise.bso", displayName: "AskWise" });
         db.setState(PREVIOUS_COMMENT_CID_KEY, "QmPrevious");
         expect(buildBotAuthor(config, db, { displayName: "Custom", name: "evil.eth" } as never, botFlair)).toEqual({
-            name: "bitsocialbot.bso",
+            name: "askwise.bso",
             displayName: "Custom",
             flairs: [botFlair],
             previousCommentCid: "QmPrevious"

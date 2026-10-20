@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { Config } from "../config.js";
 import type { ImageLoader } from "../images.js";
-import { buildContent, contentWithoutFailedImages, costUsd, SYSTEM_PROMPT, type ContentBlock } from "./content.js";
+import { buildContent, contentWithoutFailedImages, costUsd, type ContentBlock } from "./content.js";
 import { LlmRefusalError, type LlmClient, type LlmReply, type LlmRequest } from "./types.js";
 
 // Calls the Messages API with ANTHROPIC_API_KEY (or an `ant auth login` profile), billed per token.
@@ -10,7 +10,8 @@ export class AnthropicLlmClient implements LlmClient {
 
     constructor(
         private llmConfig: Config["llm"],
-        private images: ImageLoader
+        private images: ImageLoader,
+        private systemPrompt: string
     ) {}
 
     private create(content: ContentBlock[]) {
@@ -21,7 +22,7 @@ export class AnthropicLlmClient implements LlmClient {
             // On a policy decline the API re-runs the request on a fallback model inside the same call.
             // Haiku has no server-side fallback, so a refusal there just ends the request.
             ...(/haiku/.test(this.llmConfig.model) ? {} : { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" as const }),
-            system: SYSTEM_PROMPT,
+            system: this.systemPrompt,
             messages: [{ role: "user", content }]
         });
     }

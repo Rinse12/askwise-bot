@@ -5,7 +5,7 @@ import { CommunitySubscription, isBotComment, publishAsBot, type BotContext } fr
 
 const REGISTRATION_ROLES = new Set(["owner", "admin"]);
 const GET_COMMUNITY_TIMEOUT_MS = 2 * 60_000;
-const REPO_URL = "https://github.com/bitsocialnet/Bitsocial-bot";
+const REPO_URL = "https://github.com/rinse12/askwise-bot";
 
 // A community address is a domain (.eth / .bso) or an IPNS public key (12D3KooW...).
 const ADDRESS_REGEX = /(?<![\w.-])([a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:eth|bso)|12D3KooW[1-9A-HJ-NP-Za-km-z]{44})(?![\w-])/i;

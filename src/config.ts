@@ -12,6 +12,16 @@ export function loadEnvFile() {
     if (fs.existsSync(ENV_FILE)) process.loadEnvFile(ENV_FILE);
 }
 
+// The bot's database. A data dir from before the rename still has bitsocialbot.db (and its -wal/-shm);
+// they are moved to bot.db once.
+export function dbPath(dataDir: string): string {
+    const file = path.join(dataDir, "bot.db");
+    const legacy = path.join(dataDir, "bitsocialbot.db");
+    if (!fs.existsSync(file) && fs.existsSync(legacy))
+        for (const suffix of ["", "-wal", "-shm"]) if (fs.existsSync(legacy + suffix)) fs.renameSync(legacy + suffix, file + suffix);
+    return file;
+}
+
 export interface Limits {
     communityRepliesPerHour: number;
     communityTokensPerDay: number;
@@ -79,8 +89,8 @@ export function loadConfig(env?: NodeJS.ProcessEnv): Config {
         pkcRpcUrl: env.PKC_RPC_URL || "ws://localhost:9138",
         pkcRpcSshHost: env.PKC_RPC_SSH_HOST || undefined,
         pkcRpcSshRemote: env.PKC_RPC_SSH_REMOTE || "127.0.0.1:9138",
-        botName: (env.BOT_NAME || "bitsocialbot.bso").toLowerCase(),
-        botDisplayName: env.BOT_DISPLAY_NAME || "Bitsocial Bot",
+        botName: (env.BOT_NAME || "askwise.bso").toLowerCase(),
+        botDisplayName: env.BOT_DISPLAY_NAME || "AskWise",
         registryAddress: env.REGISTRY_ADDRESS || undefined,
         dataDir: path.resolve(env.DATA_DIR || "data"),
         imageProxyUrl: env.IMAGE_PROXY_URL || undefined,

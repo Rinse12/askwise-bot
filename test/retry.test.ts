@@ -31,7 +31,7 @@ describe("mention retries in the db", () => {
     afterEach(() => db.close());
 
     it("counts failed attempts and returns due retries with their comment, oldest first", () => {
-        const comment = { cid: "m1", timestamp: NOW, content: "@bitsocialbot ?" };
+        const comment = { cid: "m1", timestamp: NOW, content: "@askwise ?" };
         db.setMention("m1", "a.bso", "alice.bso", "replying", { comment });
         db.setMention("m1", "a.bso", "alice.bso", "failed", { reason: "offline", retryAt: NOW + 60 });
         db.setMention("m1", "a.bso", "alice.bso", "failed", { reason: "offline", retryAt: NOW + 120 });

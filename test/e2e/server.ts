@@ -1,5 +1,5 @@
 // Stands in for a bitsocial-cli daemon: an offline Kubo node plus an in-process pkc RPC server whose
-// name resolver is a mutable in-memory map, so the e2e test can point bitsocialbot.bso at any signer.
+// name resolver is a mutable in-memory map, so the e2e test can point askwise.bso at any signer.
 import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import net, { type AddressInfo } from "node:net";
@@ -61,7 +61,7 @@ async function startKubo(dir: string, apiPort: number): Promise<ChildProcess> {
 
 export async function startRpcServer() {
     const port = await freePort();
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), "bitsocialbot-e2e-"));
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "askwise-e2e-"));
     const kuboApiPort = await freePort();
     const kubo = await startKubo(path.join(root, "kubo"), kuboApiPort);
     const kuboApi = `http://127.0.0.1:${kuboApiPort}/api/v0`;

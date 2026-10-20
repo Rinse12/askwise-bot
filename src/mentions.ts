@@ -9,8 +9,8 @@ export interface MentionableComment {
 
 const escapeRegex = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-// Matches `@bitsocialbot`, `@bitsocialbot.bso`, `bitsocialbot.bso` and `u/bitsocialbot.bso`
-// (the .eth spelling of the name is accepted too). A bare `bitsocialbot` without @ is not a call.
+// Matches `@askwise`, `@askwise.bso`, `askwise.bso` and `u/askwise.bso`
+// (the .eth spelling of the name is accepted too). A bare `askwise` without @ is not a call.
 export function createMentionRegex(botName: string): RegExp {
     const label = escapeRegex(botName.split(".")[0]);
     const tld = "\\.(?:eth|bso)";

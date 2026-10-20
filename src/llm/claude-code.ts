@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import type { Config } from "../config.js";
 import type { ImageLoader } from "../images.js";
-import { buildContent, contentWithoutFailedImages, SYSTEM_PROMPT, type ContentBlock } from "./content.js";
+import { buildContent, contentWithoutFailedImages, type ContentBlock } from "./content.js";
 import { LlmRefusalError, type LlmClient, type LlmReply, type LlmRequest } from "./types.js";
 
 const TIMEOUT_MS = 5 * 60_000;
@@ -34,9 +34,10 @@ export class ClaudeCodeLlmClient implements LlmClient {
     constructor(
         private llmConfig: Config["llm"],
         private images: ImageLoader,
+        private systemPrompt: string,
         private bin = "claude"
     ) {
-        this.cwd = fs.mkdtempSync(path.join(os.tmpdir(), "bitsocialbot-claude-"));
+        this.cwd = fs.mkdtempSync(path.join(os.tmpdir(), "bot-claude-"));
     }
 
     private run(content: ContentBlock[]): Promise<ClaudeCodeResult> {
@@ -46,7 +47,7 @@ export class ClaudeCodeLlmClient implements LlmClient {
             "--output-format", "stream-json",
             "--verbose",
             "--tools", "",
-            "--system-prompt", SYSTEM_PROMPT,
+            "--system-prompt", this.systemPrompt,
             "--model", this.llmConfig.model,
             "--effort", this.llmConfig.effort,
             "--setting-sources", "",
