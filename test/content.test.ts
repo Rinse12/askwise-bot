@@ -30,4 +30,8 @@ describe("systemPrompt", () => {
         expect(prompt).toMatch(/^You are Helper \(@helper\),/);
         expect(prompt).not.toMatch(/askwise/i);
     });
+
+    it("refuses to repost text word for word", () => {
+        expect(systemPrompt({ botName: "a.bso", botDisplayName: "A" })).toMatch(/do not repost, repeat or reformat text/);
+    });
 });

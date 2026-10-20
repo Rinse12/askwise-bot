@@ -2,6 +2,8 @@
 
 An AI reply bot for Bitsocial communities, in the spirit of "@grok is this true?". It only works in communities that explicitly installed it. In those, anyone can mention `@askwise` (or `askwise.bso` / `u/askwise.bso`) in a post or a reply, and the bot answers in the thread. It reads the thread and any images posted in it.
 
+AskWise is an independent project. It is not made, run or endorsed by Bitsocial.
+
 ## Using the bot
 
 In any community that has installed it, mention the bot in a post or a reply, and it answers in the thread a few moments later.
