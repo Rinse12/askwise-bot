@@ -1,7 +1,7 @@
 import { buildBotAuthor, pickBotFlair, PREVIOUS_COMMENT_CID_KEY, type BotAuthor } from "./author.js";
 import type { Config } from "./config.js";
 import type { BotDb } from "./db.js";
-import { challengesMissingBotExclude, diagnoseInstall, type ChallengeWithExclude } from "./install/exclude.js";
+import { undecidedChallenges, diagnoseInstall, type ChallengeWithExclude } from "./install/exclude.js";
 import { checkLimits } from "./limits.js";
 import { isTooOld, nextAttemptAt } from "./retry.js";
 import { findPrivateInfo, PrivateInfoBlockedError } from "./llm/private-info.js";
@@ -130,6 +130,8 @@ export abstract class CommunitySubscription {
     }
 }
 
+const challengedStateKey = (address: string) => `challenged:${address}`;
+
 // What a retry needs from a mention, without the (possibly large) nested reply pages
 const mentionSnapshot = ({ replies: _replies, ...comment }: PageComment): PageComment => comment;
 
@@ -140,12 +142,12 @@ export class CommunityWatcher extends CommunitySubscription {
         if (!row || row.status === "uninstalled") return;
 
         const challenges = this.community!.challenges as ChallengeWithExclude[] | undefined;
-        const missing = challengesMissingBotExclude(challenges, config.botName);
+        const missing = undecidedChallenges(challenges, config.botName);
         if (missing.length > 0) {
-            // None exempt the bot: the owner uninstalled it. Some do: challenges were added after installing.
+            // None names the bot: the owner uninstalled it. Some do: challenges were added after installing.
             const uninstalled = missing.length === challenges!.length;
             const reason = uninstalled
-                ? "no challenge excludes the bot anymore"
+                ? "no challenge exempts or checks the bot anymore"
                 : `${diagnoseInstall(challenges, config.botName).problems.join("; ")}. Run the install script again`;
             if (row.status !== (uninstalled ? "uninstalled" : "needs_reinstall") || row.status_reason !== reason) {
                 console.warn(`[${this.address}] ${reason}`);
@@ -154,6 +156,14 @@ export class CommunityWatcher extends CommunitySubscription {
             if (uninstalled) await this.stop();
             // Not walking while the install is incomplete leaves mentions unseen, so they are answered once it is fixed
             return;
+        }
+        // A challenge the owner kept for the bot asked it a question. Answering more mentions would only pay for
+        // replies that cannot be published, so wait until the owner changes the challenges.
+        const challengedKey = challengedStateKey(this.address);
+        const challengedWith = db.getState(challengedKey);
+        if (challengedWith !== undefined) {
+            if (challengedWith === JSON.stringify(challenges ?? [])) return;
+            db.deleteState(challengedKey);
         }
         if (row.status === "needs_reinstall") {
             console.log(`[${this.address}] install is complete again`);
@@ -238,7 +248,10 @@ export class CommunityWatcher extends CommunitySubscription {
             const retryAt = nextAttemptAt({ kind: "failed", attempts, retryable: !(error instanceof LlmRefusalError) }, mention.timestamp, config.limits, nowTs);
             console.error(`[${this.address}] failed to answer ${mention.cid} (attempt ${attempts}${retryAt ? ", will retry" : ", giving up"}): ${reason}`);
             record("failed", { reason, retryAt });
-            if (error instanceof ChallengedError) db.setCommunityStatus(this.address, "needs_reinstall", reason);
+            if (error instanceof ChallengedError) {
+                db.setCommunityStatus(this.address, "needs_reinstall", reason);
+                db.setState(challengedStateKey(this.address), JSON.stringify(this.community!.challenges ?? []));
+            }
         }
     }
 

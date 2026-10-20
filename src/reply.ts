@@ -11,9 +11,9 @@ export interface ReplyTarget {
 
 const PUBLISH_TIMEOUT_MS = 5 * 60_000;
 
-// Publishes a reply and resolves with its CID. The bot never answers challenges: an installed
-// community excludes the bot's name from every challenge, so being challenged means the install
-// is missing or incomplete, and is reported as ChallengedError.
+// Publishes a reply and resolves with its CID. The bot never answers challenges: an installed community
+// exempts the bot from every challenge that could ask it something, so being challenged means the install
+// is missing or incomplete, or a challenge the owner kept for the bot asked a question. Reported as ChallengedError.
 export async function publishReply(pkc: PkcInstance, signer: BotSigner, author: BotAuthor, target: ReplyTarget, content: string): Promise<string> {
     const comment = await pkc.createComment({ ...target, content, signer, author });
 
@@ -32,7 +32,7 @@ export async function publishReply(pkc: PkcInstance, signer: BotSigner, author: 
 
         comment.on("challenge", (challenge: { challenges?: { type?: string }[] }) => {
             const types = challenge.challenges?.map((c) => c.type).join(", ");
-            finish(new ChallengedError(`${target.communityAddress} challenged the bot (${types ?? "unknown"}); its challenges do not exclude the bot's name`));
+            finish(new ChallengedError(`${target.communityAddress} challenged the bot (${types ?? "unknown"}): a challenge that is not exempted asked a question the bot cannot answer. Run the install script again with --ask-all and exempt it`));
         });
         comment.on("challengeverification", (verification: { challengeSuccess: boolean; reason?: string; challengeErrors?: Record<string, string>; commentUpdate?: { cid?: string } }) => {
             if (verification.challengeSuccess) {

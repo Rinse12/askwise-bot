@@ -5,9 +5,10 @@
 //   4. a post mentioning the bot and a depth-2 reply mentioning it each get exactly one reply,
 //      published without a challenge, with the bot's profile and previousCommentCid chain
 //   5. install on a community whose challenges already have all kinds of excludes, and uninstall
-//   6. key rotation: re-pointing the name exempts the new key and challenges the old one
-//   7. a challenge added later is picked up by re-running install
-//   8. uninstall: the bot marks the community uninstalled
+//   6. a challenge added later is picked up by re-running install
+//   7. a challenge the owner keeps for the bot (marker) still challenges it
+//   8. key rotation: re-pointing the name exempts the new key and challenges the old one
+//   9. uninstall: the bot marks the community uninstalled
 //
 //   npm run e2e   (needs a kubo binary on PATH or KUBO_BIN)
 import { execFile } from "node:child_process";
@@ -18,7 +19,7 @@ import path from "node:path";
 import { startBot } from "../../src/bot.js";
 import { loadConfig } from "../../src/config.js";
 import { BotDb } from "../../src/db.js";
-import { addBotExclude, challengesMissingBotExclude, diagnoseInstall, type ChallengeWithExclude } from "../../src/install/exclude.js";
+import { addBotExclude, diagnoseInstall, setBotDecisions, undecidedChallenges, type ChallengeWithExclude } from "../../src/install/exclude.js";
 import type { LlmClient } from "../../src/llm/types.js";
 import { createMentionRegex } from "../../src/mentions.js";
 import { createPkc, type PkcInstance } from "../../src/pkc.js";
@@ -62,7 +63,9 @@ const fakeLlm: LlmClient = {
 
 // Async on purpose: the RPC server runs in this process, so a sync exec would block it
 async function installScript(rpcUrl: string, community: string, ...flags: string[]) {
-    const { stdout } = await promisify(execFile)("npx", ["tsx", "scripts/install.ts", "--rpc", rpcUrl, "--community", community, ...flags], {
+    // The script asks about each challenge in a terminal; here every challenge is exempted
+    const decide = flags.includes("--uninstall") || flags.includes("--exempt-all") ? [] : ["--exempt-all"];
+    const { stdout } = await promisify(execFile)("npx", ["tsx", "scripts/install.ts", "--rpc", rpcUrl, "--community", community, ...decide, ...flags], {
         cwd: ROOT,
         env: { ...process.env, BOT_NAME },
         encoding: "utf8"
@@ -111,10 +114,10 @@ try {
 
     step("install script: dry run, then install");
     assert.match(await installScript(url, community.address, "--dry-run"), /--dry-run/);
-    assert.deepEqual(challengesMissingBotExclude(community.settings!.challenges as ChallengeWithExclude[], BOT_NAME), [0], "dry run must not edit");
+    assert.deepEqual(undecidedChallenges(community.settings!.challenges as ChallengeWithExclude[], BOT_NAME), [0], "dry run must not edit");
     await installScript(url, community.address);
     await until("public excludes include the bot", async () =>
-        challengesMissingBotExclude(await publicChallenges(pkc, community.address), BOT_NAME).length === 0 ? true : undefined
+        undecidedChallenges(await publicChallenges(pkc, community.address), BOT_NAME).length === 0 ? true : undefined
     );
     console.log("public challenges:", JSON.stringify(await publicChallenges(pkc, community.address)));
 
@@ -150,7 +153,7 @@ try {
     const answerOf = async (cid: string) => (await pkc.getComment({ cid: db.getMention(cid)!.reply_cid! })).content ?? "";
     const notInstalledAnswer = await answerOf(notInstalledPost);
     assert.match(notInstalledAnswer, /^❌ askwise\.bso is not installed in 12D3KooW/);
-    assert.match(notInstalledAnswer, /- challenge #0 \(text\/plain\): it has no exclude for askwise\.bso/);
+    assert.match(notInstalledAnswer, /- challenge #0 \(text\/plain\): it neither exempts nor checks askwise\.bso/);
     assert.match(notInstalledAnswer, /npm run install-bot -- --community 12D3KooW/);
     assert.match(await answerOf(noAddressPost), /does not contain a community address/);
     assert.match(await answerOf(againPost), /^✅ askwise\.bso is already installed/);
@@ -236,7 +239,7 @@ try {
     assert.deepEqual(diagnoseInstall(before, BOT_NAME).problems.length, 4, "challenges #0-#3 do not exempt the bot yet");
 
     const matrixInstall = await installScript(url, matrix.address);
-    assert.match(matrixInstall, /challenge #4 .*already excludes the bot/);
+    assert.match(matrixInstall, /challenge #4 .*already exempts the bot/);
     const after = await saved();
     assert.deepEqual(after, addBotExclude(before, BOT_NAME).challenges, "pkc-js saved exactly the original challenges plus the bot's items");
     await until("matrix public challenges exempt the bot", async () => (diagnoseInstall(await publicChallenges(pkc, matrix.address), BOT_NAME).installed ? true : undefined));
@@ -257,28 +260,39 @@ try {
     await installScript(url, matrix.address, "--uninstall");
     const uninstalled = await saved();
     assert.deepEqual(uninstalled.slice(0, 3), before.slice(0, 3), "uninstall restores challenges that did not exempt the bot before");
-    assert.deepEqual(challengesMissingBotExclude(uninstalled, BOT_NAME), [0, 1, 2, 3, 4]);
+    assert.deepEqual(undecidedChallenges(uninstalled, BOT_NAME), [0, 1, 2, 3, 4]);
     assert.deepEqual(uninstalled[2].exclude, [{ names: ["askwise.eth"] }, { names: ["AskWise.bso"] }], "other spellings are left to the owner");
     assert.deepEqual(uninstalled[4].exclude, [{ names: ["friend.bso"] }], "shared names keep the other entries");
     assert.equal(uninstalled[3].exclude, undefined, "items that only named the bot are removed with their conditions");
-
-    step("key rotation");
-    const rotated = await pkc.createSigner();
-    nameRecords.set(BOT_NAME, rotated.address);
-    const target = { communityAddress: community.address, parentCid: mentionPost, postCid: mentionPost };
-    await assert.rejects(publishReply(pkc, botSigner, { name: BOT_NAME }, target, "old key"), ChallengedError);
-    await publishReply(pkc, rotated, { name: BOT_NAME }, target, "new key");
-    nameRecords.set(BOT_NAME, botSigner.address);
-    console.log("old key challenged, new key exempt");
 
     step("a challenge added after install is picked up by re-running install");
     await community.edit({ settings: { ...community.settings!, challenges: [...community.settings!.challenges!, { name: "question", options: { question: "2+2?", answer: "4" } }] } });
     await until("bot marks needs_reinstall", () => db.getCommunity(community.address)?.status === "needs_reinstall");
     console.log("status:", db.getCommunity(community.address)?.status_reason);
     const reinstallOutput = await installScript(url, community.address);
-    assert.match(reinstallOutput, /challenge #0 .*already excludes the bot/);
-    assert.match(reinstallOutput, /challenge #1 .*added exclude/);
+    assert.match(reinstallOutput, /challenge #0 .*already exempts the bot/);
+    assert.match(reinstallOutput, /challenge #1 .*now exempts the bot/);
     await until("bot marks installed again", () => db.getCommunity(community.address)?.status === "installed");
+
+    step("a challenge the owner keeps for the bot (marker) still challenges it");
+    const target = { communityAddress: community.address, parentCid: mentionPost, postCid: mentionPost };
+    const kept = setBotDecisions(community.settings!.challenges as ChallengeWithExclude[], BOT_NAME, new Map([[1, false]])).challenges;
+    await community.edit({ settings: { ...community.settings!, challenges: kept } });
+    await until("marker published", async () => (diagnoseInstall(await publicChallenges(pkc, community.address), BOT_NAME).checkedBy.length === 1 ? true : undefined));
+    assert.deepEqual(diagnoseInstall(await publicChallenges(pkc, community.address), BOT_NAME), { installed: true, problems: [], checkedBy: ["#1 (text/plain)"] });
+    await assert.rejects(publishReply(pkc, botSigner, { name: BOT_NAME }, target, "checked by the question"), ChallengedError);
+    console.log("marked challenge still asks the bot");
+    const exemptAgain = setBotDecisions(community.settings!.challenges as ChallengeWithExclude[], BOT_NAME, new Map([[1, true]])).challenges;
+    await community.edit({ settings: { ...community.settings!, challenges: exemptAgain } });
+    await until("exemption published", async () => (diagnoseInstall(await publicChallenges(pkc, community.address), BOT_NAME).checkedBy.length === 0 ? true : undefined));
+
+    step("key rotation");
+    const rotated = await pkc.createSigner();
+    nameRecords.set(BOT_NAME, rotated.address);
+    await assert.rejects(publishReply(pkc, botSigner, { name: BOT_NAME }, target, "old key"), ChallengedError);
+    await publishReply(pkc, rotated, { name: BOT_NAME }, target, "new key");
+    nameRecords.set(BOT_NAME, botSigner.address);
+    console.log("old key challenged, new key exempt");
 
     step("uninstall");
     await installScript(url, community.address, "--uninstall");

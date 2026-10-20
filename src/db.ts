@@ -263,6 +263,10 @@ export class BotDb {
         this.db.prepare("INSERT OR REPLACE INTO bot_state (key, value) VALUES (?, ?)").run(key, value);
     }
 
+    deleteState(key: string) {
+        this.db.prepare("DELETE FROM bot_state WHERE key = ?").run(key);
+    }
+
     // llm usage
 
     recordUsage(usage: LlmUsageInput) {

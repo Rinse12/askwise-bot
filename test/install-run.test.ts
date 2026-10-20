@@ -1,6 +1,6 @@
 // runInstall, the body of `npm run install-bot`, against a fake node that records what gets saved.
 import { describe, expect, it } from "vitest";
-import { addBotExclude, challengesMissingBotExclude, removeBotExclude, type ChallengeWithExclude } from "../src/install/exclude.js";
+import { addBotExclude, undecidedChallenges, removeBotExclude, type ChallengeWithExclude } from "../src/install/exclude.js";
 import { runInstall, type InstallCommunity, type InstallPkc } from "../src/install/run.js";
 import { BOT, BOT_ITEM, PRODUCTION_LIKE, SCENARIOS } from "./fixtures/challenge-scenarios.js";
 
@@ -46,12 +46,12 @@ function fakeNode(
     return { pkc, node, opened };
 }
 
-const install = (pkc: InstallPkc, extra: { uninstall?: boolean; dryRun?: boolean } = {}) => runInstall(pkc, { address: ADDRESS, botName: BOT, ...extra });
+const install = (pkc: InstallPkc, extra: { uninstall?: boolean; dryRun?: boolean } = {}) => runInstall(pkc, { address: ADDRESS, botName: BOT, exemptAll: true, ...extra });
 
 describe("runInstall: refuses what it cannot do", () => {
     it("a community the node does not host", async () => {
         const { pkc, node } = fakeNode([{ name: "text-math" }], { hosted: ["other.bso", "12D3KooWabc"] });
-        await expect(runInstall(pkc, { address: ADDRESS, botName: BOT, rpcLabel: "ws://localhost:9138" })).rejects.toThrow(
+        await expect(runInstall(pkc, { address: ADDRESS, botName: BOT, exemptAll: true, rpcLabel: "ws://localhost:9138" })).rejects.toThrow(
             "memes.bso is not hosted by the node at ws://localhost:9138. Hosted communities: other.bso, 12D3KooWabc"
         );
         expect(node.edits).toEqual([]);
@@ -90,7 +90,7 @@ describe("runInstall: finds the hosted community by name or public key", () => {
 
     it("given its public key while the node lists it by name", async () => {
         const { pkc, opened } = fakeNode([{ name: "text-math" }], { hosted: [ADDRESS] });
-        const report = await runInstall(pkc, { address: PUBLIC_KEY, botName: BOT });
+        const report = await runInstall(pkc, { address: PUBLIC_KEY, botName: BOT, exemptAll: true });
         expect(opened).toEqual([ADDRESS]);
         expect(report.saved).toBe(true);
     });
@@ -115,7 +115,7 @@ describe("runInstall: what gets saved", () => {
         }
         expect(node.edits).toHaveLength(1);
         expect(node.edits[0]).toEqual({ ...OTHER_SETTINGS, challenges: addBotExclude(challenges, BOT).challenges });
-        expect(challengesMissingBotExclude(node.edits[0].challenges as ChallengeWithExclude[], BOT)).toEqual([]);
+        expect(undecidedChallenges(node.edits[0].challenges as ChallengeWithExclude[], BOT)).toEqual([]);
         expect(report.saved).toBe(true);
     });
 
@@ -134,7 +134,7 @@ describe("runInstall: what gets saved", () => {
         await install(pkc);
         await install(pkc, { uninstall: true });
         const final = (node.settings!.challenges ?? []) as ChallengeWithExclude[];
-        expect(challengesMissingBotExclude(final, BOT)).toEqual(final.map((_, index) => index));
+        expect(undecidedChallenges(final, BOT)).toEqual(final.map((_, index) => index));
         expect(final).toEqual(removeBotExclude(addBotExclude(challenges, BOT).challenges, BOT).challenges);
         if (roundTrips && challenges.every((challenge) => challenge.exclude?.length !== 0)) expect(final).toEqual(challenges);
         expect({ ...node.settings, challenges: undefined }).toEqual({ ...OTHER_SETTINGS, challenges: undefined });
@@ -208,15 +208,15 @@ describe("runInstall: uninstall", () => {
 describe("runInstall: output", () => {
     it("names each challenge by name or path and points to the registry", async () => {
         const { pkc } = fakeNode(PRODUCTION_LIKE);
-        const report = await runInstall(pkc, { address: ADDRESS, botName: BOT, registryAddress: "registry.askwise.bso" });
-        expect(report.lines).toContain("  challenge #0 (publication-match): added exclude for askwise.bso");
-        expect(report.lines).toContain("  challenge #2 (@bitsocial/spam-blocker-challenge): added exclude for askwise.bso");
+        const report = await runInstall(pkc, { address: ADDRESS, botName: BOT, exemptAll: true, registryAddress: "registry.askwise.bso" });
+        expect(report.lines).toContain("  challenge #0 (publication-match): now exempts the bot");
+        expect(report.lines).toContain("  challenge #2 (@bitsocial/spam-blocker-challenge): now exempts the bot");
         expect(report.lines.at(-1)).toMatch(/registry community \(registry\.askwise\.bso\) from the owner or an admin account, containing just: memes\.bso$/);
     });
 
     it("uses the bot name it is given, exactly as given", async () => {
         const { pkc, node } = fakeNode([{ name: "text-math" }]);
-        await runInstall(pkc, { address: ADDRESS, botName: "mybot.bso" });
+        await runInstall(pkc, { address: ADDRESS, botName: "mybot.bso", exemptAll: true });
         expect((node.edits[0].challenges as ChallengeWithExclude[])[0].exclude).toEqual([{ names: ["mybot.bso"], publicationType: { reply: true } }]);
     });
 });

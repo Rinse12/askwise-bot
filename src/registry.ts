@@ -14,7 +14,7 @@ export const parseRegisteredAddress = (post: Pick<PageComment, "title" | "conten
     `${post.title ?? ""}\n${post.content ?? ""}`.match(ADDRESS_REGEX)?.[1];
 
 export type Verification =
-    | { ok: true; address: string; alreadyInstalled: boolean }
+    | { ok: true; address: string; alreadyInstalled: boolean; checkedBy: string[] }
     | { ok: false; address?: string; problems: string[]; fix: string };
 
 // The ❌ reply: what is wrong and what to do about it.
@@ -58,6 +58,7 @@ export class RegistryWatcher extends CommunitySubscription {
             db.installCommunity(verification.address, poster, post.cid);
             await this.onInstalled(verification.address);
             answer = `✅ ${botName} is ${verification.alreadyInstalled ? "already " : ""}installed in ${verification.address}. Mention @${botName.split(".")[0]} in a post or reply there to call it.`;
+            if (verification.checkedBy.length > 0) answer += `\n\nIts replies are still checked by challenge ${verification.checkedBy.join(", ")}.`;
         } else answer = formatFailure(botName, verification);
         console.log(`[registry] ${post.cid} by ${poster}: ${answer.split("\n").join(" ")}`);
 
@@ -108,7 +109,7 @@ export class RegistryWatcher extends CommunitySubscription {
                 fix: "post again from the owner's account or an admin's account."
             };
 
-        const { installed, problems } = diagnoseInstall(target.challenges as ChallengeWithExclude[] | undefined, botName);
+        const { installed, problems, checkedBy } = diagnoseInstall(target.challenges as ChallengeWithExclude[] | undefined, botName);
         if (!installed)
             return {
                 ok: false,
@@ -116,8 +117,8 @@ export class RegistryWatcher extends CommunitySubscription {
                 problems,
                 fix:
                     `on the machine running the community's bitsocial-cli, run \`npm run install-bot -- --community ${address}\` from ${REPO_URL}. ` +
-                    "It exempts the bot from every challenge and leaves your users' challenges as they are. Wait for the community to publish its update (about a minute), then post here again."
+                    "It asks, for each challenge, whether to exempt the bot, and leaves your users' challenges as they are. Wait for the community to publish its update (about a minute), then post here again."
             };
-        return { ok: true, address: target.address, alreadyInstalled: this.ctx.db.getCommunity(target.address)?.status === "installed" };
+        return { ok: true, address: target.address, alreadyInstalled: this.ctx.db.getCommunity(target.address)?.status === "installed", checkedBy };
     }
 }

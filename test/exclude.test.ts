@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addBotExclude, botExcludeItem, challengesMissingBotExclude, diagnoseInstall, isBotExcludeItem, removeBotExclude } from "../src/install/exclude.js";
+import { addBotExclude, botExcludeItem, undecidedChallenges, diagnoseInstall, isBotExcludeItem, removeBotExclude } from "../src/install/exclude.js";
 
 const BOT = "askwise.bso";
 
@@ -37,18 +37,18 @@ describe("addBotExclude", () => {
         expect(changed).toEqual([1]);
         expect(unchanged).toEqual([0]);
         expect(updated[0]).toBe(installed[0]);
-        expect(challengesMissingBotExclude(updated, BOT)).toEqual([]);
+        expect(undecidedChallenges(updated, BOT)).toEqual([]);
         expect(addBotExclude(updated, BOT).changed).toEqual([]);
     });
 
     it("treats no challenges as installed", () => {
         expect(addBotExclude([], BOT).changed).toEqual([]);
-        expect(challengesMissingBotExclude([], BOT)).toEqual([]);
-        expect(challengesMissingBotExclude(undefined, BOT)).toEqual([]);
+        expect(undecidedChallenges([], BOT)).toEqual([]);
+        expect(undecidedChallenges(undefined, BOT)).toEqual([]);
     });
 
     it("does not count a publicKeys-only exclude as installed", () => {
-        expect(challengesMissingBotExclude([{ exclude: [{ publicKeys: ["12D3KooWabc"] }] }], BOT)).toEqual([0]);
+        expect(undecidedChallenges([{ exclude: [{ publicKeys: ["12D3KooWabc"] }] }], BOT)).toEqual([0]);
     });
 });
 
@@ -80,7 +80,7 @@ describe("diagnoseInstall", () => {
         const { installed, problems } = diagnoseInstall(challenges, BOT);
         expect(installed).toBe(false);
         expect(problems).toEqual([
-            "challenge #1 (text/plain): it has no exclude for askwise.bso",
+            "challenge #1 (text/plain): it neither exempts nor checks askwise.bso: the owner has not decided on it",
             'challenge #2 (url/iframe): its exclude names "askwise.eth", but it must be exactly "askwise.bso" (pkc-js compares names exactly)',
             'challenge #3: its exclude names "AskWise.bso", but it must be exactly "askwise.bso" (pkc-js compares names exactly)',
             "challenge #4: its exclude for askwise.bso also requires postScore, so it does not always apply",
@@ -89,7 +89,7 @@ describe("diagnoseInstall", () => {
     });
 
     it("reports installed when every challenge exempts the bot, or there are none", () => {
-        expect(diagnoseInstall([{ exclude: [botExcludeItem(BOT)] }], BOT)).toEqual({ installed: true, problems: [] });
+        expect(diagnoseInstall([{ exclude: [botExcludeItem(BOT)] }], BOT)).toEqual({ installed: true, problems: [], checkedBy: [] });
         expect(diagnoseInstall([], BOT).installed).toBe(true);
     });
 });

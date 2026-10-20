@@ -25,7 +25,7 @@ The bot can be wrong. Treat its answers like any other reply.
 
 ## How it fits into pkc-js
 
-- **Installing = exempting the bot's name from the community's challenges.** Every challenge in `settings.challenges` gets this exclude item:
+- **Installing = deciding, for each of the community's challenges, whether the bot is exempt from it.** An exempted challenge in `settings.challenges` gets this exclude item:
 
   ```json
   { "names": ["askwise.bso"], "publicationType": { "reply": true } }
@@ -35,10 +35,12 @@ The bot can be wrong. Treat its answers like any other reply.
   - The bot only publishes replies, and the exemption covers only replies.
   - Your own users are still challenged exactly as before.
   - This is *not* the `whitelist` challenge, which would lock out everyone not on the list.
-- **Excludes are public**, so the bot checks for itself that a community installed it. If an owner adds a challenge later without the exemption, the bot notices, stops answering there, and resumes once the install script is re-run.
+- **Challenges the owner keeps for the bot** (e.g. AI moderation) get a marker item instead: `{ "names": ["askwise.bso"], "publicationType": { "reply": false } }`. pkc-js never applies it, since no publication type is set to true; the bot's replies go through that challenge like anyone else's. The marker only records that the owner decided.
+  - Whether a challenge asks a question is only known when a publication arrives (mintpass, for one, passes some authors and asks others), so the install script can't tell which ones the bot could pass. If a challenge kept for the bot asks it a question, the bot can't answer: it stops answering in that community until the challenges change, and says so in its status.
+- **Excludes are public**, so the bot checks for itself that a community installed it. If an owner adds a challenge later and hasn't decided on it, the bot notices, stops answering there, and resumes once the install script is re-run.
 - **Registering:** after installing, the owner or an admin posts the community address in the registry community.
-  - The bot checks that the poster has the `owner`/`admin` role and that every challenge exempts it, then replies ✅ and starts watching.
-  - Otherwise it replies ❌ with what is wrong and how to fix it: no address in the post, community unreachable, poster without the role, or which challenge lacks the exemption (including a `.eth` or differently-cased spelling of the name).
+  - The bot checks that the poster has the `owner`/`admin` role and that every challenge has a decision, then replies ✅ (listing the challenges that still check its replies) and starts watching.
+  - Otherwise it replies ❌ with what is wrong and how to fix it: no address in the post, community unreachable, poster without the role, or which challenge has no decision (including a `.eth` or differently-cased spelling of the name).
 - **Mentions** are found by walking whatever page sorts the community publishes. No particular sort (`new`, `hot`, …) is assumed. Pages are content-addressed, so already-walked pages are never fetched twice.
 
 ## Install @askwise in your community
@@ -54,7 +56,10 @@ npm run install-bot -- --community <your-community-address> --dry-run
 npm run install-bot -- --community <your-community-address>
 ```
 
-- The script only edits challenges that don't exempt the bot yet. **Run it again whenever you add challenges.**
+- For each challenge the script asks **whether to exempt the bot** (`y`/`n`, no default):
+  - `y`: the bot's replies skip it.
+  - `n`: the bot's replies must pass it, e.g. to keep AI moderation on what the bot writes. If it asks a question (a captcha, a quiz...), the bot can't answer and won't reply in your community.
+- On later runs it only asks about challenges you haven't decided on yet. **Run it again whenever you add challenges.** `--ask-all` asks about every challenge again, `--exempt-all` exempts the bot from all of them without asking.
 - If your daemon is elsewhere, set `PKC_RPC_SSH_HOST=<ssh host>` (tunnel) or `PKC_RPC_URL=ws://host:9138/<auth-key>` in `.env`, or pass `--rpc`.
 
 Then, from the owner or an admin account, make a post in the registry community **`registry.askwise.bso`** whose content is just your community address. The bot replies ✅ when it is active, or ❌ with what to fix.

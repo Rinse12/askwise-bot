@@ -1,7 +1,7 @@
 // The install script's core (addBotExclude / removeBotExclude) against the shapes settings.challenges
 // can take in pkc-js. The same matrix runs against a real community in the e2e test (test/e2e/run.ts).
 import { describe, expect, it } from "vitest";
-import { addBotExclude, challengesMissingBotExclude, removeBotExclude } from "../src/install/exclude.js";
+import { addBotExclude, undecidedChallenges, removeBotExclude } from "../src/install/exclude.js";
 import { BOT, BOT_ITEM, SCENARIOS } from "./fixtures/challenge-scenarios.js";
 
 const clone = <T>(value: T): T => structuredClone(value);
@@ -28,7 +28,7 @@ describe.each(SCENARIOS)("install with $name", ({ challenges, changes, roundTrip
     });
 
     it("leaves the bot exempt from every challenge", () => {
-        expect(challengesMissingBotExclude(installed.challenges, BOT)).toEqual([]);
+        expect(undecidedChallenges(installed.challenges, BOT)).toEqual([]);
     });
 
     it("changes nothing when run again", () => {
@@ -47,7 +47,7 @@ describe.each(SCENARIOS)("install with $name", ({ challenges, changes, roundTrip
         if (roundTrips) expect(uninstalled).toEqual(original.map((challenge) => (challenge.exclude?.length === 0 ? (({ exclude: _e, ...rest }) => rest)(challenge) : challenge)));
         // whatever the original was, nothing exempts the bot by its exact name anymore
         for (const challenge of uninstalled) for (const item of challenge.exclude ?? []) expect(item.names ?? []).not.toContain(BOT);
-        expect(challengesMissingBotExclude(uninstalled, BOT)).toEqual(uninstalled.map((_, index) => index));
+        expect(undecidedChallenges(uninstalled, BOT)).toEqual(uninstalled.map((_, index) => index));
     });
 });
 
