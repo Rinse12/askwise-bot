@@ -1,3 +1,8 @@
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/logo-dark.png">
+  <img src="assets/logo.png" alt="AskWise" width="400">
+</picture>
+
 # @askwise
 
 An AI reply bot for Bitsocial communities, in the spirit of "@grok is this true?". It only works in communities that explicitly installed it. In those, anyone can mention `@askwise` (or `askwise.bso` / `u/askwise.bso`) in a post or a reply, and the bot answers in the thread. It reads the thread and any images posted in it.
@@ -156,7 +161,7 @@ Every command (`npm start`, `install-bot`, `usage`, `create-signer`) reads `.env
 | `PRIVATE_STRINGS` | comma-separated strings no reply may contain, e.g. your name or email |
 | `LIMIT_*` | spend and rate limits; the daily spend cap defaults to $20 |
 
-Optionally add `data/author-profile.json` with `displayName`, an `avatar` (NFT) or `wallets`. Avatar and wallet entries must be signed offline by the wallet that owns the name.
+Optionally add `data/author-profile.json` with `displayName`, an `avatar` (NFT) or `wallets`. Avatar and wallet entries must be signed offline by the wallet that owns the name. The avatar artwork is `assets/avatar.png` (1024×1024); Bitsocial avatars are NFTs, so mint it first.
 
 ### 6. Run it
 
@@ -168,7 +173,7 @@ npm start
 - To keep it running, use a systemd user service:
 
   ```ini
-  # ~/.config/systemd/user/social-bot.service
+  # ~/.config/systemd/user/askwise-bot.service
   [Unit]
   Description=AskWise bot
   After=network-online.target
@@ -184,9 +189,9 @@ npm start
   ```
 
   ```sh
-  systemctl --user enable --now social-bot
+  systemctl --user enable --now askwise-bot
   loginctl enable-linger "$USER"   # keep it running after you log out
-  journalctl --user -u social-bot -f
+  journalctl --user -u askwise-bot -f
   ```
 
 - All state is in `data/`: the key, `bot.db` (installed communities, handled mentions, token usage) and the optional profile. Back up that folder to move the bot to another machine.
@@ -246,7 +251,7 @@ The bot can be offline: on a laptop that sleeps, during a restart, or while the 
 - **Rate-limited mentions** wait until the limits allow them.
 - **Interrupted replies:** a reply interrupted by a crash or shutdown is retried on the next start.
 
-**After a suspend or network drop, restart the bot** (`npm start`, or `systemctl --user restart social-bot`). The pkc RPC client reconnects, but until [pkc-js#425](https://github.com/pkcprotocol/pkc-js/issues/425) is fixed its community subscriptions stay silent afterwards. Nothing is lost: the restart picks up the backlog.
+**After a suspend or network drop, restart the bot** (`npm start`, or `systemctl --user restart askwise-bot`). The pkc RPC client reconnects, but until [pkc-js#425](https://github.com/pkcprotocol/pkc-js/issues/425) is fixed its community subscriptions stay silent afterwards. Nothing is lost: the restart picks up the backlog.
 
 ## Development
 

@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1016 320" width="1016" height="320">
+  <title>AskWise</title>
+  <g transform="translate(16 16) scale(0.5625)">
+  <rect width="512" height="512" rx="112" fill="#2B2A6B"/>
+  <!-- owl-shaped speech bubble: slanted ear tufts on top, tail bottom-left -->
+  <path fill="#F6F1E7" d="M104 112 Q170 132 212 162 Q256 150 300 162 Q342 132 408 112 Q398 170 400 214 L400 322 Q400 382 340 382 L236 382 L150 438 L172 382 Q112 382 112 322 L112 214 Q114 170 104 112 Z"/>
+  <!-- facial disc -->
+  <g fill="#E8DCC4">
+    <circle cx="198" cy="256" r="68"/>
+    <circle cx="314" cy="256" r="68"/>
+  </g>
+  <g fill="#F2A93B">
+    <circle cx="198" cy="256" r="48"/>
+    <circle cx="314" cy="256" r="48"/>
+    <path d="M238 302 L274 302 L256 336 Z"/>
+  </g>
+  <g fill="#2B2A6B">
+    <circle cx="206" cy="248" r="26"/>
+    <circle cx="322" cy="248" r="26"/>
+  </g>
+  <g fill="#F6F1E7">
+    <circle cx="215" cy="239" r="7.5"/>
+    <circle cx="331" cy="239" r="7.5"/>
+  </g>
+  </g>
+  <text x="340" y="212" font-family="Ubuntu, 'Noto Sans', 'DejaVu Sans', sans-serif" font-weight="700" font-size="168" letter-spacing="-4"><tspan fill="#2B2A6B">Ask</tspan><tspan fill="#F2A93B">Wise</tspan></text>
+</svg>
