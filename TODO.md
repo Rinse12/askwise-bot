@@ -14,5 +14,4 @@
   - Leave web fetch out: following links users post is the easiest way in for prompt injection.
   - Then drop "You cannot browse the web" from the system prompt.
 
-- [ ] **Set the avatar.** The artwork is done (`assets/avatar.png`, logo in `assets/logo*.svg`).
-  - Bitsocial avatars are NFTs: mint `assets/avatar.png`, sign the avatar entry with the wallet that owns `askwise.eth`, and put it in `data/author-profile.json`.
+- [ ] **Set the avatar** on seedit: blocked on bitsocialnet/seedit#853, steps in [#1](https://github.com/Rinse12/askwise-bot/issues/1).
