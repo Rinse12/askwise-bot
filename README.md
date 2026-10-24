@@ -66,12 +66,15 @@ npm run install-bot -- --community <your-community-address>
 - For each challenge the script asks **whether to exempt the bot** (`y`/`n`, no default):
   - `y`: the bot's replies skip it.
   - `n`: the bot's replies must pass it, e.g. to keep AI moderation on what the bot writes. If it asks a question (a captcha, a quiz...), the bot can't answer and won't reply in your community.
+- Then, unless your community already offers one, it asks whether to add a `🤖 bot` author flair, and explains what that changes (see "Optional bot badge" below). `--bot-flair` adds it without asking, `--no-bot-flair` skips it.
 - On later runs it only asks about challenges you haven't decided on yet. **Run it again whenever you add challenges.** `--ask-all` asks about every challenge again, `--exempt-all` exempts the bot from all of them without asking.
 - If your daemon is elsewhere, set `PKC_RPC_SSH_HOST=<ssh host>` (tunnel) or `PKC_RPC_URL=ws://host:9138/<auth-key>` in `.env`, or pass `--rpc`.
 
 Then, from the owner or an admin account, make a post in the registry community **`registry.askwise.bso`** whose content is just your community address. The bot replies ✅ when it is active, or ❌ with what to fix.
 
-**Optional bot badge.** A community only accepts author flairs it lists itself. To have the bot's replies show a bot flair, enable `features.authorFlairs` and add an author flair whose text contains "bot" (e.g. `🤖 bot`) to `flairs.author`. The bot uses it automatically.
+**Optional bot badge.** A community only accepts author flairs it lists itself, so the bot can't badge itself. The install script offers to enable `features.authorFlairs` and add `🤖 bot` to `flairs.author`; any author flair whose text contains "bot" works, and the bot uses it automatically.
+- Enabling `features.authorFlairs` is community-wide: every author can then pick their own flair from `flairs.author`, including the bot one. The badge is a label; only the name `askwise.bso` proves a reply is the bot's.
+- Uninstalling leaves the flair in place.
 
 **Uninstall:**
 

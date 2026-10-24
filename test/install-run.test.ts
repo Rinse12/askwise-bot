@@ -1,7 +1,7 @@
 // runInstall, the body of `npm run install-bot`, against a fake node that records what gets saved.
 import { describe, expect, it } from "vitest";
 import { addBotExclude, undecidedChallenges, removeBotExclude, type ChallengeWithExclude } from "../src/install/exclude.js";
-import { runInstall, type InstallCommunity, type InstallPkc } from "../src/install/run.js";
+import { BOT_FLAIR, runInstall, type BotFlairPlan, type InstallCommunity, type InstallPkc } from "../src/install/run.js";
 import { BOT, BOT_ITEM, PRODUCTION_LIKE, SCENARIOS } from "./fixtures/challenge-scenarios.js";
 
 const ADDRESS = "memes.bso";
@@ -13,20 +13,44 @@ const PUBLIC_KEY = "12D3KooWJJcSwxH2F3sFL7YCNDLD95kBczEfkHpPNdxcjZwR2X2Y";
 
 function fakeNode(
     challenges: ChallengeWithExclude[] | undefined,
-    options: { hosted?: string[]; noSettings?: boolean; failEdit?: boolean; unresolvable?: boolean } = {}
+    options: {
+        hosted?: string[];
+        noSettings?: boolean;
+        failEdit?: boolean;
+        unresolvable?: boolean;
+        features?: InstallCommunity["features"];
+        flairs?: InstallCommunity["flairs"];
+    } = {}
 ) {
     const node = {
         settings: options.noSettings ? undefined : { ...structuredClone(OTHER_SETTINGS), ...(challenges === undefined ? {} : { challenges: structuredClone(challenges) }) },
-        edits: [] as Record<string, unknown>[]
+        features: structuredClone(options.features),
+        flairs: structuredClone(options.flairs),
+        // settings saved, and features/flairs saved, one entry per edit that carried them
+        edits: [] as Record<string, unknown>[],
+        flairEdits: [] as { features?: unknown; flairs?: unknown }[]
     };
     const community: InstallCommunity = {
         get settings() {
             return node.settings as InstallCommunity["settings"];
         },
-        edit: async ({ settings }) => {
+        get features() {
+            return node.features;
+        },
+        get flairs() {
+            return node.flairs;
+        },
+        edit: async ({ settings, features, flairs }) => {
             if (options.failEdit) throw new Error("ERR_INVALID_SETTINGS");
-            node.edits.push(structuredClone(settings));
-            node.settings = structuredClone(settings) as typeof node.settings;
+            if (settings) {
+                node.edits.push(structuredClone(settings));
+                node.settings = structuredClone(settings) as typeof node.settings;
+            }
+            if (features || flairs) {
+                node.flairEdits.push(structuredClone({ features, flairs }));
+                node.features = structuredClone(features) as typeof node.features;
+                node.flairs = structuredClone(flairs) as typeof node.flairs;
+            }
         }
     };
     const opened: string[] = [];
@@ -144,7 +168,8 @@ describe("runInstall: what gets saved", () => {
         const { pkc, node } = fakeNode([]);
         const report = await install(pkc);
         expect(node.edits).toEqual([]);
-        expect(report.lines[0]).toBe("memes.bso has no challenges, so askwise.bso can already publish. Nothing to change.");
+        expect(report.lines[0]).toBe("memes.bso has no challenges, so askwise.bso can already publish.");
+        expect(report.lines).toContain("No changes needed.");
     });
 
     it("settings without a challenges key: nothing to do, and no challenges key is invented", async () => {
@@ -218,5 +243,77 @@ describe("runInstall: output", () => {
         const { pkc, node } = fakeNode([{ name: "text-math" }]);
         await runInstall(pkc, { address: ADDRESS, botName: "mybot.bso", exemptAll: true });
         expect((node.edits[0].challenges as ChallengeWithExclude[])[0].exclude).toEqual([{ names: ["mybot.bso"], publicationType: { reply: true } }]);
+    });
+});
+
+describe("runInstall: bot flair", () => {
+    const QUESTION = [{ name: "question", options: { question: "q?", answer: "a" } }];
+
+    it("asks when the community has none, and saves the flair together with the exemption in one edit", async () => {
+        const { pkc, node } = fakeNode(QUESTION, { features: { noVideos: true }, flairs: { post: [{ text: "news" }] } });
+        const plans: BotFlairPlan[] = [];
+        const report = await runInstall(pkc, {
+            address: ADDRESS,
+            botName: BOT,
+            exemptAll: true,
+            decideBotFlair: async (plan) => (plans.push(plan), true)
+        });
+        expect(plans).toEqual([{ enablesAuthorFlairs: true, existingAuthorFlairs: [] }]);
+        expect(node.edits).toHaveLength(1);
+        // the other features and flair lists are written back, since pkc-js replaces them as a whole
+        expect(node.flairEdits).toEqual([{ features: { noVideos: true, authorFlairs: true }, flairs: { post: [{ text: "news" }], author: [BOT_FLAIR] } }]);
+        expect(report.addedBotFlair).toBe(true);
+    });
+
+    it("tells the owner which flairs everyone could pick once author flairs are turned on", async () => {
+        const { pkc, node } = fakeNode([], { flairs: { author: [{ text: "OG" }] } });
+        const plans: BotFlairPlan[] = [];
+        await runInstall(pkc, { address: ADDRESS, botName: BOT, exemptAll: true, decideBotFlair: async (plan) => (plans.push(plan), true) });
+        expect(plans).toEqual([{ enablesAuthorFlairs: true, existingAuthorFlairs: ["OG"] }]);
+        expect(node.flairEdits[0].flairs).toEqual({ author: [{ text: "OG" }, BOT_FLAIR] });
+    });
+
+    it("declined: saves only the challenges and says how to add it later", async () => {
+        const { pkc, node } = fakeNode(QUESTION);
+        const report = await runInstall(pkc, { address: ADDRESS, botName: BOT, exemptAll: true, decideBotFlair: async () => false });
+        expect(node.flairEdits).toEqual([]);
+        expect(node.edits).toHaveLength(1);
+        expect(report.lines.join("\n")).toContain("--bot-flair");
+    });
+
+    it("--bot-flair adds it without asking, even when nothing else changes", async () => {
+        const { pkc, node } = fakeNode([]);
+        const report = await runInstall(pkc, { address: ADDRESS, botName: BOT, exemptAll: true, botFlair: true, decideBotFlair: async () => expect.fail("asked") });
+        expect(node.edits).toEqual([]);
+        expect(node.flairEdits).toHaveLength(1);
+        expect(report.saved).toBe(true);
+    });
+
+    it("an offered bot flair is left alone and not asked about", async () => {
+        const offered = { features: { authorFlairs: true }, flairs: { author: [{ text: "bots" }] } };
+        const { pkc, node } = fakeNode([], offered);
+        const report = await runInstall(pkc, { address: ADDRESS, botName: BOT, exemptAll: true, decideBotFlair: async () => expect.fail("asked") });
+        expect(node.flairEdits).toEqual([]);
+        expect(report.lines).toContain(`  bot flair: ${BOT}'s replies show "bots"`);
+    });
+
+    it("a listed bot flair with the feature off: turns the feature on without adding a second flair", async () => {
+        const { pkc, node } = fakeNode([], { features: { authorFlairs: false }, flairs: { author: [{ text: "Bot" }] } });
+        await runInstall(pkc, { address: ADDRESS, botName: BOT, exemptAll: true, botFlair: true });
+        expect(node.flairEdits).toEqual([{ features: { authorFlairs: true }, flairs: { author: [{ text: "Bot" }] } }]);
+    });
+
+    it("dry run shows the flair change and saves nothing", async () => {
+        const { pkc, node } = fakeNode(QUESTION);
+        const report = await runInstall(pkc, { address: ADDRESS, botName: BOT, exemptAll: true, botFlair: true, dryRun: true });
+        expect(node.flairEdits).toEqual([]);
+        expect(report.lines).toContain("--dry-run: new features and flairs would be:");
+    });
+
+    it("uninstall leaves the flair and says so", async () => {
+        const { pkc, node } = fakeNode(addBotExclude(QUESTION, BOT).challenges, { features: { authorFlairs: true }, flairs: { author: [BOT_FLAIR] } });
+        const report = await install(pkc, { uninstall: true });
+        expect(node.flairEdits).toEqual([]);
+        expect(report.lines.at(-1)).toContain("still listed in flairs.author");
     });
 });

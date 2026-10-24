@@ -1,22 +1,26 @@
 // Owner-side script: for each challenge of a community hosted on this machine's bitsocial-cli daemon, asks
 // whether to exempt the bot's name or keep checking its replies. Safe to run again at any time; only
 // challenges not decided yet are asked about, so re-running after adding new challenges only asks about those.
+// It then offers to add a "🤖 bot" author flair, unless the community already has one.
 //
-//   npm run install-bot -- --community <address> [--rpc <url>] [--ask-all | --exempt-all] [--uninstall] [--dry-run]
+//   npm run install-bot -- --community <address> [--rpc <url>] [--ask-all | --exempt-all] [--bot-flair | --no-bot-flair] [--uninstall] [--dry-run]
 // The RPC is --rpc, else PKC_RPC_SSH_HOST (ssh tunnel) or PKC_RPC_URL from .env, else ws://localhost:9138.
 import { createInterface } from "node:readline/promises";
 import { parseArgs } from "node:util";
 import { loadConfig } from "../src/config.js";
-import { describeChallenge, runInstall, type DecideChallenge, type InstallPkc } from "../src/install/run.js";
+import { BOT_FLAIR, describeChallenge, runInstall, type DecideBotFlair, type DecideChallenge, type InstallPkc } from "../src/install/run.js";
 import { connectPkc } from "../src/pkc.js";
 
 const { values } = parseArgs({
+    // --no-bot-flair answers the flair question with no
+    allowNegative: true,
     options: {
         community: { type: "string" },
         rpc: { type: "string" },
         "bot-name": { type: "string" },
         "ask-all": { type: "boolean", default: false },
         "exempt-all": { type: "boolean", default: false },
+        "bot-flair": { type: "boolean" },
         uninstall: { type: "boolean", default: false },
         "dry-run": { type: "boolean", default: false }
     }
@@ -24,8 +28,15 @@ const { values } = parseArgs({
 
 // No default answer: whether a challenge should also check the bot is the owner's call. Options are not shown,
 // since they can hold API keys.
-function askOwner(botName: string): { decide: DecideChallenge; close: () => void } {
+function askOwner(botName: string): { decide: DecideChallenge; decideBotFlair: DecideBotFlair; close: () => void } {
     const rl = createInterface({ input: process.stdin, output: process.stdout });
+    const yesNo = async (question: string) => {
+        for (;;) {
+            const answer = (await rl.question(question)).trim().toLowerCase();
+            if (answer === "y" || answer === "yes") return true;
+            if (answer === "n" || answer === "no") return false;
+        }
+    };
     let explained = false;
     const decide: DecideChallenge = async (challenge, index) => {
         if (!explained) {
@@ -38,13 +49,29 @@ function askOwner(botName: string): { decide: DecideChallenge; close: () => void
             );
         }
         const description = typeof challenge.description === "string" ? ` - ${challenge.description}` : "";
-        for (;;) {
-            const answer = (await rl.question(`challenge #${index} (${describeChallenge(challenge)})${description}\n  exempt ${botName}? [y/n] `)).trim().toLowerCase();
-            if (answer === "y" || answer === "yes") return true;
-            if (answer === "n" || answer === "no") return false;
-        }
+        return yesNo(`challenge #${index} (${describeChallenge(challenge)})${description}\n  exempt ${botName}? [y/n] `);
     };
-    return { decide, close: () => rl.close() };
+    // Explains what the flair is for and what turning it on changes for everyone else, since that part is not obvious
+    const decideBotFlair: DecideBotFlair = async ({ enablesAuthorFlairs, existingAuthorFlairs }) => {
+        const listed = existingAuthorFlairs.length > 0 ? `the ones you already list (${existingAuthorFlairs.map((text) => `"${text}"`).join(", ")}) and ` : "";
+        console.log(
+            `\nBot badge (optional)\n` +
+                `  Why: ${botName}'s replies are written by an AI. A "${BOT_FLAIR.text}" flair next to its name lets readers see\n` +
+                "  that at a glance, instead of having to recognise the name.\n" +
+                "  Why the community must add it: a community only accepts author flairs from its own list\n" +
+                "  (flairs.author), and only when features.authorFlairs is on. The bot cannot badge itself.\n" +
+                `  What changes: "${BOT_FLAIR.text}" is added to flairs.author` +
+                (enablesAuthorFlairs
+                    ? ", and features.authorFlairs is turned on.\n" +
+                      `  That setting is community-wide: every author can then pick their own flair from flairs.author, i.e.\n` +
+                      `  ${listed}"${BOT_FLAIR.text}".\n`
+                    : ".\n") +
+                `  So anyone can wear the badge: it is a label, not proof. Only the name ${botName} proves a reply is the bot's.\n` +
+                "  Without it, the bot works the same, its replies just carry no badge.\n"
+        );
+        return yesNo(`  add the "${BOT_FLAIR.text}" author flair? [y/n] `);
+    };
+    return { decide, decideBotFlair, close: () => rl.close() };
 }
 
 async function main() {
@@ -65,6 +92,8 @@ async function main() {
             address: values.community,
             botName,
             decide: owner?.decide,
+            decideBotFlair: owner?.decideBotFlair,
+            botFlair: values["bot-flair"],
             exemptAll: values["exempt-all"],
             askAll: values["ask-all"],
             uninstall: values.uninstall,

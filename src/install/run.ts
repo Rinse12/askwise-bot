@@ -1,3 +1,4 @@
+import { isBotFlair, pickBotFlair } from "../author.js";
 import { challengeChecksBot, challengeExemptsBot, removeBotExclude, setBotDecisions, undecidedChallenges, type ChallengeWithExclude } from "./exclude.js";
 
 // The slice of a pkc instance the install needs, so it can be tested without a node
@@ -9,11 +10,26 @@ export interface InstallPkc {
 
 export interface InstallCommunity {
     settings?: { challenges?: unknown[]; [key: string]: unknown };
-    edit(options: { settings: Record<string, unknown> }): Promise<unknown>;
+    features?: { authorFlairs?: boolean; [key: string]: unknown };
+    flairs?: { author?: { text: string }[]; [key: string]: unknown };
+    edit(options: { settings?: Record<string, unknown>; features?: Record<string, unknown>; flairs?: Record<string, unknown> }): Promise<unknown>;
 }
 
 // Asks the owner whether to exempt the bot from one challenge: true exempts it, false keeps checking its replies
 export type DecideChallenge = (challenge: ChallengeWithExclude, index: number) => Promise<boolean>;
+
+// What adding the bot flair would change, so the owner can be told before deciding
+export interface BotFlairPlan {
+    // features.authorFlairs is off, so adding the flair also lets every author pick their own flair
+    enablesAuthorFlairs: boolean;
+    // the author flairs the community already lists (any author could pick these once the feature is on)
+    existingAuthorFlairs: string[];
+}
+
+// Asks the owner whether to offer a bot author flair, so the bot's replies show a bot badge
+export type DecideBotFlair = (plan: BotFlairPlan) => Promise<boolean>;
+
+export const BOT_FLAIR = { text: "🤖 bot" };
 
 export interface InstallOptions {
     address: string;
@@ -23,6 +39,9 @@ export interface InstallOptions {
     exemptAll?: boolean;
     // ask again about challenges already decided (by default only undecided ones are asked about)
     askAll?: boolean;
+    // the optional bot badge: added when botFlair is true, else asked with decideBotFlair, else only suggested
+    botFlair?: boolean;
+    decideBotFlair?: DecideBotFlair;
     uninstall?: boolean;
     dryRun?: boolean;
     rpcLabel?: string;
@@ -32,6 +51,7 @@ export interface InstallOptions {
 export interface InstallReport {
     lines: string[];
     changed: number[];
+    addedBotFlair: boolean;
     unchanged: number[];
     challenges: ChallengeWithExclude[];
     saved: boolean;
@@ -67,7 +87,7 @@ export async function runInstall(pkc: InstallPkc, options: InstallOptions): Prom
     const current = (settings.challenges ?? []) as ChallengeWithExclude[];
 
     const lines: string[] = [];
-    if (current.length === 0 && !uninstall) lines.push(`${address} has no challenges, so ${botName} can already publish. Nothing to change.`);
+    if (current.length === 0 && !uninstall) lines.push(`${address} has no challenges, so ${botName} can already publish.`);
 
     let change;
     if (uninstall) change = removeBotExclude(current, botName);
@@ -83,11 +103,31 @@ export async function runInstall(pkc: InstallPkc, options: InstallOptions): Prom
         lines.push(`  challenge #${index} (${describeChallenge(current[index])}): ${uninstall ? `removed the exclude for ${botName}` : `now ${state(change.challenges[index])}`}`);
     for (const index of change.unchanged) lines.push(`  challenge #${index} (${describeChallenge(current[index])}): ${uninstall ? "had no exclude for the bot" : `already ${state(current[index])}`}`);
 
+    // The bot badge. pkc-js replaces features and flairs as a whole on edit, so the other entries are written back.
+    const offeredFlair = pickBotFlair(community);
+    const listedFlairs = community.flairs?.author ?? [];
+    let flairEdit: { features: Record<string, unknown>; flairs: Record<string, unknown> } | undefined;
+    if (!uninstall && offeredFlair) lines.push(`  bot flair: ${botName}'s replies show "${offeredFlair.text}"`);
+    else if (!uninstall) {
+        const plan: BotFlairPlan = { enablesAuthorFlairs: community.features?.authorFlairs !== true, existingAuthorFlairs: listedFlairs.map((flair) => flair.text) };
+        const add = options.botFlair ?? (options.decideBotFlair ? await options.decideBotFlair(plan) : false);
+        if (add) {
+            flairEdit = {
+                features: { ...community.features, authorFlairs: true },
+                // a bot flair may already be listed while the feature is off; reuse it instead of adding a second one
+                flairs: { ...community.flairs, author: listedFlairs.some(isBotFlair) ? listedFlairs : [...listedFlairs, BOT_FLAIR] }
+            };
+            lines.push(`  bot flair: ${plan.enablesAuthorFlairs ? "turned on features.authorFlairs, " : ""}${botName}'s replies will show "${(flairEdit.flairs.author as { text: string }[]).find(isBotFlair)!.text}"`);
+        } else lines.push(`  bot flair: none, so ${botName}'s replies show no bot badge (run again with --bot-flair to add one)`);
+    }
+
     let saved = false;
-    if (change.changed.length === 0) lines.push("No changes needed.");
-    else if (dryRun) lines.push("", "--dry-run: new settings.challenges would be:", JSON.stringify(change.challenges, null, 2));
-    else {
-        await community.edit({ settings: { ...settings, challenges: change.challenges } });
+    if (change.changed.length === 0 && !flairEdit) lines.push("No changes needed.");
+    else if (dryRun) {
+        if (change.changed.length > 0) lines.push("", "--dry-run: new settings.challenges would be:", JSON.stringify(change.challenges, null, 2));
+        if (flairEdit) lines.push("", "--dry-run: new features and flairs would be:", JSON.stringify(flairEdit, null, 2));
+    } else {
+        await community.edit({ ...(change.changed.length > 0 ? { settings: { ...settings, challenges: change.challenges } } : {}), ...flairEdit });
         saved = true;
         lines.push("", `Saved settings of ${address}.`);
     }
@@ -114,6 +154,8 @@ export async function runInstall(pkc: InstallPkc, options: InstallOptions): Prom
                 `from the owner or an admin account, containing just: ${address}`
         );
     if (uninstall && saved) lines.push(`${botName} will stop answering in ${address} on its next update.`);
+    if (uninstall && listedFlairs.some(isBotFlair))
+        lines.push(`The bot author flair is still listed in flairs.author; remove it yourself if no other bot uses it.`);
 
-    return { lines, changed: change.changed, unchanged: change.unchanged, challenges: change.challenges, saved };
+    return { lines, changed: change.changed, addedBotFlair: Boolean(flairEdit) && saved, unchanged: change.unchanged, challenges: change.challenges, saved };
 }

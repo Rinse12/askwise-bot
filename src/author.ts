@@ -18,13 +18,15 @@ type Flair = NonNullable<BotAuthor["flairs"]>[number];
 const PROFILE_KEYS = new Set(["displayName", "avatar", "wallets"]);
 export const PREVIOUS_COMMENT_CID_KEY = "previous_comment_cid";
 
+export const isBotFlair = (flair: { text?: unknown }) => typeof flair.text === "string" && /\bbots?\b/i.test(flair.text);
+
 // A community only accepts an author flair when community.features.authorFlairs is on and the flair is
 // one of its community.flairs.author entries. So the bot marks itself as a bot only where the community
 // offers such a flair (any author flair whose text contains "bot"), and sends that exact flair.
 export function pickBotFlair(community: { features?: unknown; flairs?: unknown }): Flair | undefined {
     if ((community.features as { authorFlairs?: boolean } | undefined)?.authorFlairs !== true) return undefined;
     const authorFlairs = (community.flairs as { author?: Flair[] } | undefined)?.author ?? [];
-    return authorFlairs.find((flair) => /\bbots?\b/i.test(flair.text));
+    return authorFlairs.find(isBotFlair);
 }
 
 // Optional data/author-profile.json: fields that need signatures from the wallet owning the name
