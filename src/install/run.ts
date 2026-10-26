@@ -151,7 +151,7 @@ export async function runInstall(pkc: InstallPkc, options: InstallOptions): Prom
         lines.push(
             "",
             `Next step: once the community has published this update, make a post in the registry community${options.registryAddress ? ` (${options.registryAddress})` : ""} ` +
-                `from the owner or an admin account, containing just: ${address}`
+                `containing just: ${address}`
         );
     if (uninstall && saved) lines.push(`${botName} will stop answering in ${address} on its next update.`);
     if (uninstall && listedFlairs.some(isBotFlair))

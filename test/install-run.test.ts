@@ -236,7 +236,7 @@ describe("runInstall: output", () => {
         const report = await runInstall(pkc, { address: ADDRESS, botName: BOT, exemptAll: true, registryAddress: "registry.askwise.bso" });
         expect(report.lines).toContain("  challenge #0 (publication-match): now exempts the bot");
         expect(report.lines).toContain("  challenge #2 (@bitsocial/spam-blocker-challenge): now exempts the bot");
-        expect(report.lines.at(-1)).toMatch(/registry community \(registry\.askwise\.bso\) from the owner or an admin account, containing just: memes\.bso$/);
+        expect(report.lines.at(-1)).toMatch(/registry community \(registry\.askwise\.bso\) containing just: memes\.bso$/);
     });
 
     it("uses the bot name it is given, exactly as given", async () => {

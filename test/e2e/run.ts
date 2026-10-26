@@ -1,7 +1,7 @@
 // End-to-end run against a local pkc RPC node (offline Kubo + mock name resolver), with a fake LLM:
 //   1. create a community (default question challenge) and a registry community
 //   2. run the install script (dry run, then for real) and check the public excludes
-//   3. the owner registers in the registry, the bot answers ✅ and starts watching
+//   3. a user and the owner register in the registry, the bot answers ✅ to both and starts watching
 //   4. a post mentioning the bot and a depth-2 reply mentioning it each get exactly one reply,
 //      published without a challenge, with the bot's profile and previousCommentCid chain
 //   5. install on a community whose challenges already have all kinds of excludes, and uninstall
@@ -132,11 +132,11 @@ try {
     const strangerPost = await publish(pkc, { communityAddress: registry.address, title: "register", content: community.address, signer: user });
     const ownerPost = await publish(pkc, { communityAddress: registry.address, title: "register", content: community.address, signer: owner });
     await until("registry posts answered", () => db.getMention(ownerPost)?.status === "replied" && db.getMention(strangerPost)?.status === "replied");
+    // the excludes are the owner's consent, so a user without a role can register the community too
     assert.equal(db.getCommunity(community.address)?.status, "installed");
-    assert.equal(db.getCommunity(community.address)?.installed_by, owner.address);
     const strangerAnswer = await pkc.getComment({ cid: db.getMention(strangerPost)!.reply_cid! });
-    assert.match(strangerAnswer.content ?? "", /^❌[\s\S]*not an owner or admin[\s\S]*To fix it: post again from the owner's account/);
     const ownerAnswer = await pkc.getComment({ cid: db.getMention(ownerPost)!.reply_cid! });
+    assert.match(strangerAnswer.content ?? "", /^✅/);
     assert.match(ownerAnswer.content ?? "", /^✅/);
     assert.equal(ownerAnswer.author.flairs, undefined, "registry does not allow author flairs, so the bot sends none");
     console.log("registry answers:", strangerAnswer.content, "|", ownerAnswer.content);

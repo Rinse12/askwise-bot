@@ -3,7 +3,6 @@ import type { PageComment } from "./pages.js";
 import { nextAttemptAt } from "./retry.js";
 import { CommunitySubscription, isBotComment, publishAsBot, type BotContext } from "./watcher.js";
 
-const REGISTRATION_ROLES = new Set(["owner", "admin"]);
 const GET_COMMUNITY_TIMEOUT_MS = 2 * 60_000;
 const REPO_URL = "https://github.com/rinse12/askwise-bot";
 
@@ -27,8 +26,9 @@ export const formatFailure = (botName: string, failure: Extract<Verification, { 
         `To fix it: ${failure.fix}`
     ].join("\n");
 
-// Watches the registry community. An owner or admin posts their community's address there; the bot
-// checks the poster's role and the public challenge excludes, answers ✅/❌, and starts watching.
+// Watches the registry community. Anyone can post a community's address there; the bot checks the public
+// challenge excludes, answers ✅/❌, and starts watching. Only the owner can set those excludes, so they
+// are the owner's consent and the poster's role does not matter.
 export class RegistryWatcher extends CommunitySubscription {
     constructor(
         ctx: BotContext,
@@ -96,18 +96,6 @@ export class RegistryWatcher extends CommunitySubscription {
                 fix: "check the address, make sure the node running the community is online, then post again."
             };
         }
-
-        // Roles are keyed by author address (name or public key); check both forms the poster may be listed under
-        const roles = (target.roles ?? {}) as Record<string, { role?: string } | undefined>;
-        const posterKeys = [post.author?.address, post.author?.name, post.author?.publicKey].filter((key): key is string => Boolean(key));
-        const role = posterKeys.map((key) => roles[key]?.role).find((r) => r !== undefined);
-        if (!role || !REGISTRATION_ROLES.has(role))
-            return {
-                ok: false,
-                address,
-                problems: [`the poster (${post.author?.address ?? "unknown"}) is ${role ? `only a ${role}` : "not an owner or admin"} of the community`],
-                fix: "post again from the owner's account or an admin's account."
-            };
 
         const { installed, problems, checkedBy } = diagnoseInstall(target.challenges as ChallengeWithExclude[] | undefined, botName);
         if (!installed)

@@ -45,9 +45,9 @@ The bot can be wrong. Treat its answers like any other reply.
 - **Challenges the owner keeps for the bot** (e.g. AI moderation) get a marker item instead: `{ "names": ["askwise.bso"], "publicationType": { "reply": false } }`. pkc-js never applies it, since no publication type is set to true; the bot's replies go through that challenge like anyone else's. The marker only records that the owner decided.
   - Whether a challenge asks a question is only known when a publication arrives (mintpass, for one, passes some authors and asks others), so the install script can't tell which ones the bot could pass. If a challenge kept for the bot asks it a question, the bot can't answer: it stops answering in that community until the challenges change, and says so in its status.
 - **Excludes are public**, so the bot checks for itself that a community installed it. If an owner adds a challenge later and hasn't decided on it, the bot notices, stops answering there, and resumes once the install script is re-run.
-- **Registering:** after installing, the owner or an admin posts the community address in the registry community.
-  - The bot checks that the poster has the `owner`/`admin` role and that every challenge has a decision, then replies ✅ (listing the challenges that still check its replies) and starts watching.
-  - Otherwise it replies ❌ with what is wrong and how to fix it: no address in the post, community unreachable, poster without the role, or which challenge has no decision (including a `.eth` or differently-cased spelling of the name).
+- **Registering:** after installing, anyone posts the community address in the registry community.
+  - The poster's role doesn't matter: only the owner can set the challenge excludes, so they are the owner's consent. The bot checks that every challenge has a decision, then replies ✅ (listing the challenges that still check its replies) and starts watching.
+  - Otherwise it replies ❌ with what is wrong and how to fix it: no address in the post, community unreachable, or which challenge has no decision (including a `.eth` or differently-cased spelling of the name).
 - **Mentions** are found by walking whatever page sorts the community publishes. No particular sort (`new`, `hot`, …) is assumed. Pages are content-addressed, so already-walked pages are never fetched twice.
 
 ## Install @askwise in your community
@@ -70,7 +70,7 @@ npm run install-bot -- --community <your-community-address>
 - On later runs it only asks about challenges you haven't decided on yet. **Run it again whenever you add challenges.** `--ask-all` asks about every challenge again, `--exempt-all` exempts the bot from all of them without asking.
 - If your daemon is elsewhere, set `PKC_RPC_SSH_HOST=<ssh host>` (tunnel) or `PKC_RPC_URL=ws://host:9138/<auth-key>` in `.env`, or pass `--rpc`.
 
-Then, from the owner or an admin account, make a post in the registry community **`registry.askwise.bso`** whose content is just your community address. The bot replies ✅ when it is active, or ❌ with what to fix.
+Then make a post, from any account, in the registry community **`registry.askwise.bso`** whose content is just your community address. The bot replies ✅ when it is active, or ❌ with what to fix.
 
 **Optional bot badge.** A community only accepts author flairs it lists itself, so the bot can't badge itself. The install script offers to enable `features.authorFlairs` and add `🤖 bot` to `flairs.author`; any author flair whose text contains "bot" works, and the bot uses it automatically.
 - Enabling `features.authorFlairs` is community-wide: every author can then pick their own flair from `flairs.author`, including the bot one. The badge is a label; only the name `askwise.bso` proves a reply is the bot's.
