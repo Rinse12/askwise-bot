@@ -20,7 +20,7 @@
     },
     "dependencies": {
         "@anthropic-ai/sdk": "0.135.0",
-        "@pkcprotocol/pkc-js": "0.0.114",
+        "@pkcprotocol/pkc-js": "0.0.124",
         "better-sqlite3": "13.0.3",
         "fetch-socks": "1.3.3",
         "undici": "8.12.2"
