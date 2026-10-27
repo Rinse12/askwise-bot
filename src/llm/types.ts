@@ -12,6 +12,8 @@ export interface LlmReply {
 
 export interface LlmRequest {
     community: string;
+    // community.rules as the owner published them; the reply has to follow them
+    rules: string[];
     threadContext: string;
     // images posted in the thread, closest to the calling comment first
     images: ThreadImage[];

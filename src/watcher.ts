@@ -232,7 +232,12 @@ export class CommunityWatcher extends CommunitySubscription {
 
             let reply: LlmReply;
             try {
-                reply = await llm.reply({ community: this.address, threadContext: buildThreadContext(mention, ancestors), images: threadImages(mention, ancestors) });
+                reply = await llm.reply({
+                    community: this.address,
+                    rules: this.community!.rules ?? [],
+                    threadContext: buildThreadContext(mention, ancestors),
+                    images: threadImages(mention, ancestors)
+                });
             } catch (error) {
                 // A refusal is still billed
                 const refused = error instanceof LlmRefusalError ? (error as LlmRefusalError & { reply?: LlmReply }).reply : undefined;

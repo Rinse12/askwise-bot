@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { contentWithoutFailedImages, systemPrompt, type ContentBlock } from "../src/llm/content.js";
+import type { ImageLoader } from "../src/images.js";
+import { buildContent, contentWithoutFailedImages, systemPrompt, type ContentBlock } from "../src/llm/content.js";
 
 const label = (n: number): ContentBlock => ({ type: "text", text: `Image ${n}` });
 const image = (n: number): ContentBlock => ({ type: "image", source: { type: "url", url: `https://i.example/${n}.png` } });
@@ -33,5 +34,20 @@ describe("systemPrompt", () => {
 
     it("refuses to repost text word for word", () => {
         expect(systemPrompt({ botName: "a.bso", botDisplayName: "A" })).toMatch(/do not repost, repeat or reformat text/);
+    });
+});
+
+describe("buildContent", () => {
+    const noImages = {} as ImageLoader;
+    const textOf = (blocks: ContentBlock[]) => blocks.flatMap((b) => (b.type === "text" ? [b.text] : [])).join("\n");
+
+    it("lists the community's rules before the thread", async () => {
+        const blocks = await buildContent({ community: "c.bso", rules: ["Be kind", "No spam"], threadContext: "the thread", images: [] }, noImages, 4);
+        expect(textOf(blocks)).toBe("Community: c.bso\n\nCommunity rules:\n1. Be kind\n2. No spam\n\nthe thread");
+    });
+
+    it("leaves the rules section out when there are none", async () => {
+        const blocks = await buildContent({ community: "c.bso", rules: [], threadContext: "the thread", images: [] }, noImages, 4);
+        expect(textOf(blocks)).toBe("Community: c.bso\n\nthe thread");
     });
 });
