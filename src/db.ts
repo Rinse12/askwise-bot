@@ -37,6 +37,51 @@ export interface UsageTotal {
     cost_usd: number;
 }
 
+export interface CommunityReport {
+    address: string;
+    // null: mentions were handled there (e.g. the registry) but it was never installed
+    status: CommunityStatus | null;
+    installed_at: number | null;
+    mentions: number;
+    replied: number;
+    rate_limited: number;
+    skipped: number;
+    failed: number;
+    last_mention_at: number | null;
+    calls: number;
+    input_tokens: number;
+    output_tokens: number;
+    cache_read_tokens: number;
+    cost_usd: number;
+}
+
+export interface MentionReport {
+    cid: string;
+    community: string;
+    author: string;
+    handled_at: number;
+    status: MentionStatus;
+    reason: string | null;
+    attempts: number;
+    reply_cid: string | null;
+    comment_json: string | null;
+    calls: number;
+    input_tokens: number;
+    output_tokens: number;
+    cost_usd: number;
+}
+
+export interface DailyReport {
+    day: string;
+    calls: number;
+    tokens: number;
+    cost_usd: number;
+}
+
+// llm_usage per mention; a mention can have several calls (a refusal, then retries)
+const USAGE_BY_MENTION = `SELECT mention_cid, COUNT(*) AS calls, SUM(input_tokens + cache_read_tokens + cache_write_tokens) AS input_tokens,
+        SUM(output_tokens) AS output_tokens, SUM(cost_usd) AS cost_usd FROM llm_usage GROUP BY mention_cid`;
+
 const now = () => Math.floor(Date.now() / 1000);
 
 const SCHEMA = `
@@ -311,5 +356,54 @@ export class BotDb {
                  FROM llm_usage WHERE ts >= ? GROUP BY ${group} ORDER BY cost_usd DESC`
             )
             .all(sinceTs) as UsageTotal[];
+    }
+
+    // dashboard
+
+    // Every community the bot is installed in or has handled a mention of, with its mentions and usage since sinceTs
+    communityReports(sinceTs: number): CommunityReport[] {
+        return this.db
+            .prepare(
+                `WITH addresses AS (SELECT address FROM communities UNION SELECT community FROM handled_mentions),
+                 m AS (SELECT community, COUNT(*) AS mentions, SUM(status = 'replied') AS replied, SUM(status = 'rate_limited') AS rate_limited,
+                              SUM(status = 'skipped') AS skipped, SUM(status = 'failed') AS failed, MAX(handled_at) AS last_mention_at
+                       FROM handled_mentions WHERE handled_at >= @since GROUP BY community),
+                 u AS (SELECT community, COUNT(*) AS calls, SUM(input_tokens + cache_read_tokens + cache_write_tokens) AS input_tokens,
+                              SUM(output_tokens) AS output_tokens, SUM(cache_read_tokens) AS cache_read_tokens, SUM(cost_usd) AS cost_usd
+                       FROM llm_usage WHERE ts >= @since GROUP BY community)
+                 SELECT a.address, c.status, c.installed_at, COALESCE(m.mentions, 0) AS mentions, COALESCE(m.replied, 0) AS replied,
+                        COALESCE(m.rate_limited, 0) AS rate_limited, COALESCE(m.skipped, 0) AS skipped, COALESCE(m.failed, 0) AS failed,
+                        m.last_mention_at, COALESCE(u.calls, 0) AS calls, COALESCE(u.input_tokens, 0) AS input_tokens,
+                        COALESCE(u.output_tokens, 0) AS output_tokens, COALESCE(u.cache_read_tokens, 0) AS cache_read_tokens,
+                        COALESCE(u.cost_usd, 0) AS cost_usd
+                 FROM addresses a LEFT JOIN communities c ON c.address = a.address
+                 LEFT JOIN m ON m.community = a.address LEFT JOIN u ON u.community = a.address
+                 ORDER BY cost_usd DESC, mentions DESC, a.address`
+            )
+            .all({ since: sinceTs }) as CommunityReport[];
+    }
+
+    // Mentions handled since sinceTs, newest first, with the tokens and cost of answering each
+    mentionReports(sinceTs: number, limit: number): MentionReport[] {
+        return this.db
+            .prepare(
+                `SELECT h.cid, h.community, h.author, h.handled_at, h.status, h.reason, h.attempts, h.reply_cid, h.comment_json,
+                        COALESCE(u.calls, 0) AS calls, COALESCE(u.input_tokens, 0) AS input_tokens,
+                        COALESCE(u.output_tokens, 0) AS output_tokens, COALESCE(u.cost_usd, 0) AS cost_usd
+                 FROM handled_mentions h LEFT JOIN (${USAGE_BY_MENTION}) u ON u.mention_cid = h.cid
+                 WHERE h.handled_at >= ? ORDER BY h.handled_at DESC LIMIT ?`
+            )
+            .all(sinceTs, limit) as MentionReport[];
+    }
+
+    // LLM usage per UTC day since sinceTs, oldest first
+    dailyReports(sinceTs: number): DailyReport[] {
+        return this.db
+            .prepare(
+                `SELECT date(ts, 'unixepoch') AS day, COUNT(*) AS calls, SUM(input_tokens + output_tokens + cache_read_tokens + cache_write_tokens) AS tokens,
+                        SUM(cost_usd) AS cost_usd
+                 FROM llm_usage WHERE ts >= ? GROUP BY day ORDER BY day`
+            )
+            .all(sinceTs) as DailyReport[];
     }
 }

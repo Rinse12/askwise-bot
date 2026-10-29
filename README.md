@@ -148,7 +148,7 @@ bitsocial community create --title "AskWise registry" --description "Post your c
 
 ### 5. Configure `.env`
 
-Every command (`npm start`, `install-bot`, `usage`, `create-signer`) reads `.env` from the repo root. Variables already set in your shell take precedence.
+Every command (`npm start`, `install-bot`, `usage`, `dashboard`, `create-signer`) reads `.env` from the repo root. Variables already set in your shell take precedence.
 
 | Variable | What it is |
 |---|---|
@@ -245,6 +245,26 @@ They are set in `.env` (`LIMIT_*`, see `.env.example`). A mention over a limit i
 ```sh
 npm run usage -- --since 7d --by community   # or --by author / --by model, --since 24h / 4w / all
 ```
+
+For a web view, see the [dashboard](#dashboard).
+
+### Dashboard
+
+A local web page over `data/bot.db`, showing where the bot answered and what it cost:
+
+```sh
+npm run dashboard                          # http://127.0.0.1:8787/
+npm run dashboard -- --port 9000 --host 127.0.0.1
+```
+
+- **Totals:** communities installed (and how many need a reinstall), mentions by outcome (replied, failed, rate-limited, skipped), tokens in and out with the share of cache reads, cost and cost per reply, and the last 24h of spend against `LIMIT_GLOBAL_USD_PER_DAY`.
+- **Communities:** every community the bot is installed in or has handled a mention of, with its mentions by outcome, tokens, cost, the share of `LIMIT_COMMUNITY_TOKENS_PER_DAY` used in the last 24h, the last mention and the install date.
+- **Per day:** cost, tokens and LLM calls for each UTC day.
+- **Mentions:** each handled mention, newest first, with its community, author, an excerpt, status (and the reason for a failure or skip), tokens and cost (summed over all its LLM calls, refusals and retries included), and links to the mention and the bot's reply on seedit.
+
+Switch the period with the 24h / 7d / 4w / all buttons (`?since=7d`). The page refreshes every minute. It only reads the database, so it can run next to the bot.
+
+It shows authors and what they wrote, so it listens on localhost only. To open it from another machine, forward the port: `ssh -L 8787:127.0.0.1:8787 <bot-host>`.
 
 ### Downtime, backlog and retries
 

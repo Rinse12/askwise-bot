@@ -4,6 +4,7 @@
 import { parseArgs } from "node:util";
 import { dbPath, loadConfig } from "../src/config.js";
 import { BotDb, type UsageGroup } from "../src/db.js";
+import { parseSince } from "../src/since.js";
 
 const { values } = parseArgs({
     options: {
@@ -11,15 +12,6 @@ const { values } = parseArgs({
         by: { type: "string", default: "community" }
     }
 });
-
-const UNITS: Record<string, number> = { h: 3600, d: 86400, w: 604800 };
-
-function parseSince(since: string): number {
-    if (since === "all") return 0;
-    const match = since.match(/^(\d+)([hdw])$/);
-    if (!match) throw new Error(`--since must look like 24h, 7d, 4w or all`);
-    return Math.floor(Date.now() / 1000) - Number(match[1]) * UNITS[match[2]];
-}
 
 const group = values.by as UsageGroup;
 if (!["community", "author", "model"].includes(group)) throw new Error("--by must be community, author or model");
