@@ -28,6 +28,16 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 1
+      # CLAUDE_CODE_SUBPROCESS_ENV_SCRUB below needs bubblewrap. The action only installs it when
+      # allowed_non_write_users is set, so install it here the same way the action does.
+      - name: Install subprocess isolation dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends bubblewrap socat
+          # Ubuntu 24.04+ blocks the unprivileged user namespaces bubblewrap needs.
+          if [ -f /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
       - uses: anthropics/claude-code-action@v1
         env:
           # The action ends the session at Claude's first result. The code-review command starts its
